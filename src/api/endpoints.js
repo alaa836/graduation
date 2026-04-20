@@ -1,0 +1,126 @@
+/**
+ * مسارات API الموحّدة للفرونت.
+ * الـ baseURL المعرف في axiosInstance (مثلاً http://localhost:8000/api) يُضاف قبل هذه المسارات.
+ *
+ * - مسارات «مستخدمة»: ظهرت فعلياً في استدعاءات axios داخل المشروع.
+ * - مسارات «مخططة»: مطلوبة لإكمال الصفحات الحالية (بيانات وهمية الآن) أو مذكورة كتعليق في الكود.
+ */
+
+/** @typedef {'patient'|'doctor'|'admin'} UserRole */
+
+// --- مصادقة (مستخدمة: login, register) ---
+export const AUTH = {
+  /** POST { email, password, role } → { user, token } */
+  LOGIN: '/auth/login',
+  /** POST FormData (multipart) → { user, token } — التسجيل العام للمرضى فقط؛ role يُجبر على patient في الواجهة */
+  REGISTER: '/auth/register',
+  /** POST { email } — مخطط: ForgotPasswordPage */
+  FORGOT_PASSWORD: '/auth/forgot-password',
+  /** POST { email, otp } — مخطط */
+  VERIFY_OTP: '/auth/verify-otp',
+  /** POST { email, password } — مخطط */
+  RESET_PASSWORD: '/auth/reset-password',
+  /** POST — اختياري: إبطال التوكن في السيرفر */
+  LOGOUT: '/auth/logout',
+  /** GET — اختياري: بيانات المستخدم الحالي */
+  ME: '/auth/me',
+  /** PUT — اختياري: تحديث كلمة المرور وهو مسجل الدخول */
+  CHANGE_PASSWORD: '/auth/change-password',
+};
+
+// --- مواعيد المريض (مستخدمة: list, cancel) ---
+export const APPOINTMENTS = {
+  /** GET → مصفوفة أو { upcoming, previous } */
+  LIST: '/appointments',
+  /** DELETE — إلغاء موعد */
+  BY_ID: (id) => `/appointments/${id}`,
+  /** POST — مخطط: إنشاء حجز من BookingPage */
+  CREATE: '/appointments',
+  /** PATCH — مخطط: تعديل حالة / وقت */
+  PATCH: (id) => `/appointments/${id}`,
+};
+
+// --- فواتير المريض (مستخدمة: list, pay) — الباكند: PatientController@listInvoices, payInvoice ---
+export const INVOICES = {
+  /** GET → { invoices, summary } (حسب مواعيد المريض) */
+  LIST: '/invoices',
+  /** POST { paymentMethod, cardData? } — invoiceId من حقل id (مثل INV-0001) */
+  PAY: (invoiceId) => `/invoices/${encodeURIComponent(String(invoiceId))}/pay`,
+};
+
+// --- السجل الطبي للمريض (مستخدمة: get, put) ---
+export const MEDICAL_RECORDS = {
+  /** GET → { records, vitals, chronicDiseases, surgicalOperations } */
+  ROOT: '/medical-records',
+  /** PUT body — تحديث المؤشرات الحيوية / القوائم */
+  UPDATE: '/medical-records',
+};
+
+// --- ملف المريض (مخطط: PatientProfilePage — تعليقات axios) ---
+export const PATIENT = {
+  PROFILE: '/patient/profile',
+  CHANGE_PASSWORD: '/patient/change-password',
+};
+
+// --- ملف الطبيب (مخطط: DoctorProfilePage) ---
+export const DOCTOR = {
+  PROFILE: '/doctor/profile',
+  SCHEDULE: '/doctor/schedule',
+};
+
+// --- إدارة (مخطط — الصفحات تستخدم بيانات محلية) ---
+export const ADMIN = {
+  DOCTORS: '/admin/doctors',
+  DOCTOR_BY_ID: (id) => `/admin/doctors/${id}`,
+  /** POST — إنشاء مدير جديد (صلاحيات كاملة؛ يتطلب توكن أدمن) */
+  ADMINS: '/admin/admins',
+  ADMIN_BY_ID: (id) => `/admin/admins/${id}`,
+  PATIENTS: '/admin/patients',
+  PATIENT_BY_ID: (id) => `/admin/patients/${id}`,
+  APPOINTMENTS: '/admin/appointments',
+  STATS: '/admin/stats',
+  SETTINGS: '/admin/settings',
+  INVOICES_REPORT: '/admin/invoices',
+};
+
+// --- طبيب: مرضى / سجلات / وصفات (مخطط — واجهات موجودة ببيانات ثابتة) ---
+export const DOCTOR_API = {
+  PATIENTS: '/doctor/patients',
+  PATIENT_BY_ID: (id) => `/doctor/patients/${id}`,
+  PATIENT_CARE_STATUS: (id) => `/doctor/patients/${id}/care-status`,
+  PRESCRIPTIONS: '/doctor/prescriptions',
+  PRESCRIPTION_BY_ID: (id) => `/doctor/prescriptions/${id}`,
+  REPORTS: '/doctor/reports',
+  REPORT_BY_ID: (id) => `/doctor/reports/${id}`,
+  APPOINTMENTS: '/doctor/appointments',
+  MESSAGES: '/doctor/messages',
+};
+
+// --- حجز وبحث أطباء (مخطط — BookingPage) ---
+export const BOOKING = {
+  SEARCH_DOCTORS: '/doctors/search',
+  SLOTS: (doctorId) => `/doctors/${doctorId}/slots`,
+};
+
+// --- مساعد ذكاء اصطناعي (الواجهة: mock؛ الباكند معطّل حتى التفعيل لاحقاً) ---
+export const AI = {
+  CHAT: '/ai/chat',
+  /** بديل: تمرير الرسائل عبر باك يستدعي مزود خارجي */
+  ASSISTANT_MESSAGE: '/ai/messages',
+};
+
+/** تجميعة واحدة للاستيراد: import { ENDPOINTS } from './endpoints' */
+export const ENDPOINTS = {
+  AUTH,
+  APPOINTMENTS,
+  INVOICES,
+  MEDICAL_RECORDS,
+  PATIENT,
+  DOCTOR,
+  ADMIN,
+  DOCTOR_API,
+  BOOKING,
+  AI,
+};
+
+export default ENDPOINTS;
