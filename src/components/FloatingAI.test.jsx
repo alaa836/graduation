@@ -4,6 +4,12 @@ import { I18nextProvider } from 'react-i18next';
 import i18n from '../i18n';
 import FloatingAI from './FloatingAI';
 
+const store = configureStore({
+  reducer: {
+    auth: () => ({ token: null }),
+  },
+});
+
 function wrap(ui) {
   return <I18nextProvider i18n={i18n}>{ui}</I18nextProvider>;
 }
