@@ -89,7 +89,7 @@ export default function AboutPage() {
         </section>
 
         <section className="bg-blue-600 py-10 px-4 md:px-8">
-          <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
             {stats.map(({ value, label }) => (
               <div key={label} className="text-center">
                 <p className="text-3xl md:text-4xl font-extrabold text-white">{value}</p>
@@ -157,7 +157,7 @@ export default function AboutPage() {
               <h2 className="text-2xl md:text-3xl font-extrabold text-gray-800">{t('public.about.teamGridTitle')}</h2>
               <p className="text-gray-400 text-sm mt-2">{t('public.about.teamGridSub')}</p>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5">
               {team.map(({ name, role, img, specialty }) => (
                 <div key={name} className="group card-hover bg-white/80 backdrop-blur-sm rounded-2xl p-5 shadow-sm text-center cursor-default">
                   <div className="overflow-hidden rounded-2xl w-20 h-20 mx-auto mb-3 ring-2 ring-transparent group-hover:ring-blue-200/80 transition-all duration-300">

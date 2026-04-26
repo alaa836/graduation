@@ -1,18 +1,51 @@
-import { createElement, useEffect, useMemo, useState } from 'react';
+import { createElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, TrendingUp, TrendingDown, Receipt, Clock } from 'lucide-react';
 import { translateInvoiceStatus } from '../../utils/i18nStatus';
 import axiosInstance from '../../api/axiosInstance';
 import { ADMIN } from '../../api/endpoints';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { useToast } from '../../context/ToastContext';
+import { downloadTextFile } from '../../utils/downloadTextFile';
 
-const mockInvoices = [
-  { id: 'INV-001', patient: 'أحمد محمد', doctor: 'د. موسى محمد', service: 'علاج طبيعي', amount: 450, date: 'اليوم', status: 'تم الدفع' },
-  { id: 'INV-002', patient: 'سارة خالد', doctor: 'د. بسام سرحان', service: 'تنظيف أسنان', amount: 750, date: 'اليوم', status: 'تم الدفع' },
-  { id: 'INV-003', patient: 'محمود عبد الله', doctor: 'د. نور الدين', service: 'كشف قلب', amount: 300, date: 'أمس', status: 'لم يتم الدفع' },
-  { id: 'INV-004', patient: 'نور أحمد', doctor: 'د. خالد', service: 'كشف عيون', amount: 200, date: 'أمس', status: 'تم الدفع' },
-  { id: 'INV-005', patient: 'منى سعيد', doctor: 'د. موسى محمد', service: 'جلسة علاج', amount: 600, date: '18 مايو', status: 'تم الدفع' },
-];
+function escapeCsvField(val) {
+  const s = String(val ?? '');
+  if (/[",\r\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function buildFinancialReportCsv({ summary, rows, t, currency }) {
+  const line = (cells) => cells.map(escapeCsvField).join(',');
+  const out = [
+    line([t('admin.invoices.statTotalRevenue'), `${summary.total_revenue} ${currency}`]),
+    line([t('admin.invoices.statPending'), `${summary.pending_amount} ${currency}`]),
+    line([t('admin.invoices.statCount'), String(summary.invoices_count)]),
+    '',
+    line([
+      t('admin.invoices.exportColInvoice'),
+      t('admin.invoices.exportColPatient'),
+      t('admin.invoices.exportColDoctor'),
+      t('admin.invoices.exportColService'),
+      t('admin.invoices.exportColAmount'),
+      t('admin.invoices.exportColDate'),
+      t('admin.invoices.exportColStatus'),
+    ]),
+    ...rows.map((inv) =>
+      line([
+        inv.id,
+        inv.patient,
+        inv.doctor,
+        inv.service ?? '',
+        `${inv.amount} ${currency}`.trim(),
+        inv.date,
+        inv.status,
+      ])
+    ),
+  ];
+  return `\uFEFF${out.join('\r\n')}`;
+}
 
 const monthlyData = [
   { month: 'يناير', revenue: 12000, appointments: 80 },
@@ -40,6 +73,7 @@ function StatusBadge({ status, t }) {
 
 export default function AdminInvoicesPage() {
   const { t } = useTranslation();
+  const toast = useToast();
   const [invoices, setInvoices] = useState([]);
   const [summary, setSummary] = useState({ total_revenue: 0, pending_amount: 0, invoices_count: 0 });
   const [filterStatus, setFilterStatus] = useState('الكل');
@@ -56,14 +90,8 @@ export default function AdminInvoicesPage() {
       setInvoices(normalized);
       setSummary(res.data?.summary || { total_revenue: 0, pending_amount: 0, invoices_count: 0 });
     } catch (err) {
-      // keep page usable even if invoices API fails
-      setInvoices(mockInvoices);
-      setSummary({
-        total_revenue: mockInvoices.filter((i) => i.status === 'تم الدفع').reduce((s, i) => s + i.amount, 0),
-        pending_amount: mockInvoices.filter((i) => i.status === 'لم يتم الدفع').reduce((s, i) => s + i.amount, 0),
-        invoices_count: mockInvoices.length,
-      });
-      // fire a translated toast message by throwing readable error to UI text sections only
+      setInvoices([]);
+      setSummary({ total_revenue: 0, pending_amount: 0, invoices_count: 0 });
       void getApiErrorMessage(err, t('authErrors.default'));
     } finally {
       setLoading(false);
@@ -80,6 +108,42 @@ export default function AdminInvoicesPage() {
     [invoices, filterStatus]
   );
 
+  const handleExportReport = useCallback(() => {
+    if (filtered.length === 0) {
+      toast.error(t('admin.invoices.exportEmpty'));
+      return;
+    }
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const csv = buildFinancialReportCsv({
+      summary,
+      rows: filtered,
+      t,
+      currency: t('admin.home.currency'),
+    });
+    downloadTextFile(`financial-report-${dateStr}.csv`, csv);
+    toast.success(t('admin.invoices.exportSuccess'));
+  }, [filtered, summary, t, toast]);
+
+  const handleExportOne = useCallback(
+    (inv) => {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const safeId = String(inv.id ?? 'invoice').replace(/[/\\?%*:|"<>]/g, '-');
+      const csv = buildFinancialReportCsv({
+        summary: {
+          total_revenue: inv.status === 'تم الدفع' ? inv.amount : 0,
+          pending_amount: inv.status === 'لم يتم الدفع' ? inv.amount : 0,
+          invoices_count: 1,
+        },
+        rows: [inv],
+        t,
+        currency: t('admin.home.currency'),
+      });
+      downloadTextFile(`invoice-${safeId}-${dateStr}.csv`, csv);
+      toast.success(t('admin.invoices.exportSuccess'));
+    },
+    [t, toast]
+  );
+
   const totalRevenue = summary.total_revenue;
   const pending = summary.pending_amount;
   const maxRevenue = Math.max(...monthlyData.map((m) => m.revenue));
@@ -94,6 +158,7 @@ export default function AdminInvoicesPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <button
           type="button"
+          onClick={handleExportReport}
           className="flex items-center gap-2 border border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors"
         >
           <Download size={15} />
@@ -223,9 +288,10 @@ export default function AdminInvoicesPage() {
               <div className="hidden md:grid grid-cols-6 gap-3 items-center text-center">
                 <button
                   type="button"
+                  onClick={() => handleExportOne(inv)}
                   className="flex items-center justify-center gap-1 text-gray-400 text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 mx-auto"
                 >
-                  <Download size={12} /> {t('admin.invoices.downloadPdf')}
+                  <Download size={12} /> {t('admin.invoices.exportOne')}
                 </button>
                 <div className="flex justify-center">
                   <StatusBadge status={inv.status} t={t} />

@@ -185,7 +185,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <InputField label={t('register.fullName')} icon={User} value={form.name} onChange={set('name')} placeholder={t('register.placeholders.name')} />
               <InputField label={t('register.phone')} icon={Phone} value={form.phone} onChange={set('phone')} placeholder="01xxxxxxxxx" />
               <InputField label={t('register.email')} icon={Mail} value={form.email} onChange={set('email')} placeholder="example@mail.com" type="email" />
@@ -262,7 +262,7 @@ export default function RegisterPage() {
             <InputField label={t('register.address')} icon={Home} value={form.address} onChange={set('address')} placeholder={t('register.addressPh')} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1 text-start">{t('register.password')}</label>
               <div className="relative">

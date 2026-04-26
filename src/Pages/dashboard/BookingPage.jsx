@@ -6,8 +6,8 @@ import axiosInstance from '../../api/axiosInstance';
 import { BOOKING, APPOINTMENTS } from '../../api/endpoints';
 import { BENI_SUEF_GOV_AR, GOVERNORATES_AR, AREAS_BY_GOV_AR, BENI_SUEF_MARKAZ_AR } from '../../data/beniSuefGovernorate';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { getSpecialtyOptionsFromDoctors, matchesSpecialty, SPECIALTY_ALL_AR } from '../../utils/specialtyFilter';
 
-const SPECIALTIES = ['الكل', 'قلب وأوعية دموية', 'طب الأسنان', 'عظام', 'طب عيون', 'أطفال', 'مخ وأعصاب', 'علاج طبيعي', 'باطنة'];
 const GOVERNORATES = GOVERNORATES_AR;
 const AREAS = AREAS_BY_GOV_AR;
 
@@ -117,11 +117,12 @@ export default function BookingPage() {
   /** @type {Record<number, Array<{ date: string, dayLabel: string, slots: string[] }> | undefined>} */
   const [slotsByDoctor, setSlotsByDoctor] = useState({});
   const [slotsLoadingId, setSlotsLoadingId] = useState(null);
-  const [specialty, setSpecialty] = useState('الكل');
+  const [specialty, setSpecialty] = useState(SPECIALTY_ALL_AR);
   const [governorate, setGovernorate] = useState(BENI_SUEF_GOV_AR);
   const [area, setArea] = useState('');
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
+  const specialtyOptions = getSpecialtyOptionsFromDoctors(doctors);
 
   const apiOrigin = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
 
@@ -134,10 +135,10 @@ export default function BookingPage() {
         const mapped = apiDoctors.map((d, idx) => ({
           id: d.id,
           name: d.name,
-          specialty: FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.specialty || 'أخصائي باطنه',
+          specialty: d.specialty || FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.specialty || 'باطنة',
           rating: 4.7,
-          location: FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.location || BENI_SUEF_GOV_AR,
-          area: FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.area || BENI_SUEF_MARKAZ_AR[0],
+          location: d.governorate || FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.location || BENI_SUEF_GOV_AR,
+          area: d.area || FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.area || BENI_SUEF_MARKAZ_AR[0],
           price: FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.price || 150,
           img: d.avatar ? `${apiOrigin}/storage/${d.avatar}` : FALLBACK_DOCTORS[idx % FALLBACK_DOCTORS.length]?.img,
         }));
@@ -199,8 +200,7 @@ export default function BookingPage() {
   }, [doctors, loadingDoctors, toast, t]);
 
   const filtered = doctors.filter((d) => {
-    const needle = specialty === 'الكل' ? '' : specialty.replace('وأوعية دموية', '').trim();
-    const matchSpec = !needle || d.specialty.includes(needle) || d.specialty.includes(specialty);
+    const matchSpec = matchesSpecialty(d.specialty, specialty);
     const matchGov = !governorate || d.location === governorate;
     const matchArea = !area || d.area === area;
     return matchSpec && matchGov && matchArea;
@@ -254,7 +254,7 @@ export default function BookingPage() {
               onChange={(e) => setSpecialty(e.target.value)}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-start focus:outline-none focus:ring-2 focus:ring-blue-500 transition appearance-none bg-white"
             >
-              {SPECIALTIES.map((s) => (
+              {specialtyOptions.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
@@ -287,6 +287,22 @@ export default function BookingPage() {
               ))}
             </select>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-start gap-2 mt-4">
+          {specialtyOptions.map((s) => (
+            <button
+              key={`booking-chip-${s}`}
+              type="button"
+              onClick={() => setSpecialty(s)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                specialty === s
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
         </div>
       </div>
 

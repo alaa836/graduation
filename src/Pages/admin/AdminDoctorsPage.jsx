@@ -8,6 +8,7 @@ import { translateDoctorActiveStatus } from '../../utils/i18nStatus';
 import { Search, Plus, X, Save, Eye, Trash2 } from 'lucide-react';
 import ConfirmActionModal from '../../components/ConfirmActionModal';
 import { ADMIN_FILTER } from '../../constants/adminUi';
+import { getSpecialtyOptionsFromDoctors, matchesSpecialty, SPECIALTY_ALL_AR } from '../../utils/specialtyFilter';
 
 const SPECIALTIES = ['قلب وأوعية دموية', 'طب الأسنان', 'عظام', 'طب عيون', 'أطفال', 'مخ وأعصاب', 'علاج طبيعي', 'باطنة'];
 
@@ -22,6 +23,7 @@ function mapDoctorFromApi(payload, form) {
     specialty: d.specialty ?? form.specialty,
     email: d.email ?? form.email,
     phone: d.phone ?? form.phone ?? '',
+    center: d.area ?? d.center ?? form.center ?? '',
     status: active ? ADMIN_FILTER.ACTIVE : ADMIN_FILTER.INACTIVE,
     patients: d.patients_count ?? d.patients ?? 0,
     rating: Number(d.rating) || 0,
@@ -67,6 +69,7 @@ function AddDoctorModal({ onClose, onSave }) {
       onSave({
         ...form,
         id: Date.now(),
+        center: form.center || '',
         status: ADMIN_FILTER.ACTIVE,
         patients: 0,
         rating: 0,
@@ -89,7 +92,7 @@ function AddDoctorModal({ onClose, onSave }) {
           <h3 className="font-bold text-gray-800 text-lg text-start flex-1">{t('admin.doctors.modalTitle')}</h3>
         </div>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
               { label: t('admin.doctors.fieldName'), name: 'name', placeholder: t('admin.doctors.phDoctorName'), type: 'text' },
               { label: t('admin.doctors.fieldPhone'), name: 'phone', placeholder: t('admin.doctors.phPhone'), type: 'tel' },
@@ -163,9 +166,11 @@ export default function AdminDoctorsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const toast = useToast();
   const [filterStatus, setFilterStatus] = useState(ADMIN_FILTER.ALL);
+  const [specialtyFilter, setSpecialtyFilter] = useState(SPECIALTY_ALL_AR);
   const [loading, setLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [actionSubmitting, setActionSubmitting] = useState(false);
+  const specialtyOptions = useMemo(() => getSpecialtyOptionsFromDoctors(doctors), [doctors]);
 
   const loadDoctors = async () => {
     setLoading(true);
@@ -188,8 +193,9 @@ export default function AdminDoctorsPage() {
   const filtered = useMemo(() => doctors.filter((d) => {
     const matchSearch = d.name.includes(search) || d.specialty.includes(search);
     const matchStatus = filterStatus === ADMIN_FILTER.ALL || d.status === filterStatus;
-    return matchSearch && matchStatus;
-  }), [doctors, search, filterStatus]);
+    const matchSpecialty = matchesSpecialty(d.specialty, specialtyFilter);
+    return matchSearch && matchStatus && matchSpecialty;
+  }), [doctors, search, filterStatus, specialtyFilter]);
 
   const toggleStatus = async (id) => {
     const doc = doctors.find((d) => d.id === id);
@@ -270,6 +276,15 @@ export default function AdminDoctorsPage() {
             </button>
           ))}
         </div>
+        <select
+          value={specialtyFilter}
+          onChange={(e) => setSpecialtyFilter(e.target.value)}
+          className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-start"
+        >
+          {specialtyOptions.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
         <div className="relative flex-1 min-w-48">
           <input
             type="text"
@@ -282,6 +297,23 @@ export default function AdminDoctorsPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {specialtyOptions.map((s) => (
+          <button
+            key={`admin-chip-${s}`}
+            type="button"
+            onClick={() => setSpecialtyFilter(s)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              specialtyFilter === s
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600'
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((doc) => (
           <div key={doc.id} className="card-hover bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-5 space-y-4">
@@ -289,6 +321,7 @@ export default function AdminDoctorsPage() {
               <div className="flex-1 text-start min-w-0">
                 <p className="font-bold text-gray-800">{doc.name}</p>
                 <p className="text-xs text-blue-500 mt-0.5">{doc.specialty}</p>
+                {doc.center ? <p className="text-xs text-cyan-700 mt-0.5">{doc.center}</p> : null}
                 <p className="text-xs text-gray-400 mt-0.5 break-all">{doc.email}</p>
               </div>
               <img src={doc.img} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />

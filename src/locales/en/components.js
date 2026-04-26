@@ -50,6 +50,10 @@ export default {
         'I can draft follow-up questions for the patient before the next visit to improve decisions.',
       ],
     },
+    guestLocalReply:
+      'Quick reply: I received: "{{text}}". Sign in for richer answers and saved chat history.',
+    guestLocalEmpty: 'How can I help you today?',
+    errorRetryNewChat: 'Try "New chat" or send again',
     floating: {
       title: 'Medical AI assistant',
       powered: 'Powered by AI',

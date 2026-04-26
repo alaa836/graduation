@@ -44,16 +44,22 @@ export const APPOINTMENTS = {
 export const INVOICES = {
   /** GET → { invoices, summary } (حسب مواعيد المريض) */
   LIST: '/invoices',
+  /** GET invoice by reference (e.g. INV-0001) */
+  BY_REF: (invoiceId) => `/invoices/${encodeURIComponent(String(invoiceId))}`,
   /** POST { paymentMethod, cardData? } — invoiceId من حقل id (مثل INV-0001) */
   PAY: (invoiceId) => `/invoices/${encodeURIComponent(String(invoiceId))}/pay`,
 };
 
 // --- السجل الطبي للمريض (مستخدمة: get, put) ---
 export const MEDICAL_RECORDS = {
-  /** GET → { records, vitals, chronicDiseases, surgicalOperations } */
+  /** GET → { medical_record, attachments } */
   ROOT: '/medical-records',
-  /** PUT body — تحديث المؤشرات الحيوية / القوائم */
+  /** PUT — حقول مثل blood_pressure, chronic_conditions, allergies, … */
   UPDATE: '/medical-records',
+  /** POST FormData: file, category (report|lab|imaging|other) */
+  ATTACHMENTS: '/medical-records/attachments',
+  ATTACHMENT_DOWNLOAD: (id) => `/medical-records/attachments/${id}/download`,
+  ATTACHMENT_BY_ID: (id) => `/medical-records/attachments/${id}`,
 };
 
 // --- ملف المريض (مخطط: PatientProfilePage — تعليقات axios) ---
@@ -81,6 +87,9 @@ export const ADMIN = {
   STATS: '/admin/stats',
   SETTINGS: '/admin/settings',
   INVOICES_REPORT: '/admin/invoices',
+  /** GET/POST — قاعدة ردود المساعد (كلمات مفتاحية ↔ نص، بدون API خارجي) */
+  AI_KNOWLEDGE: '/admin/ai-knowledge',
+  AI_KNOWLEDGE_BY_ID: (id) => `/admin/ai-knowledge/${id}`,
 };
 
 // --- طبيب: مرضى / سجلات / وصفات (مخطط — واجهات موجودة ببيانات ثابتة) ---
@@ -102,11 +111,11 @@ export const BOOKING = {
   SLOTS: (doctorId) => `/doctors/${doctorId}/slots`,
 };
 
-// --- مساعد ذكاء اصطناعي (الواجهة: mock؛ الباكند معطّل حتى التفعيل لاحقاً) ---
+// --- مساعد: المحادثات تُحفظ في DB؛ الرد عبر driver (قاعدة معرفة / openai) ---
 export const AI = {
-  CHAT: '/ai/chat',
-  /** بديل: تمرير الرسائل عبر باك يستدعي مزود خارجي */
-  ASSISTANT_MESSAGE: '/ai/messages',
+  CONVERSATIONS: '/ai/conversations',
+  CONVERSATION_MESSAGES: (id) => `/ai/conversations/${id}/messages`,
+  MESSAGES: '/ai/messages',
 };
 
 /** تجميعة واحدة للاستيراد: import { ENDPOINTS } from './endpoints' */

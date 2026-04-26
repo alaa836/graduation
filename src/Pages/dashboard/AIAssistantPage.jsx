@@ -1,15 +1,7 @@
 import { createElement, useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Send, Mic, Paperclip, Bot, User, FileText, Calendar, Pill, Stethoscope, X } from 'lucide-react';
-
-function createMessageId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function getCurrentTime() {
-  const now = new Date();
-  return `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-}
+import { useAiChat } from '../../hooks/useAiChat';
 
 function TypingIndicator() {
   return (
@@ -70,20 +62,17 @@ function Message({ msg }) {
 
 function AIAssistantPageInner() {
   const { t } = useTranslation();
-  const [messages, setMessages] = useState(() => [
-    {
-      id: createMessageId(),
-      role: 'assistant',
-      text: t('ai.patientPage.initial'),
-      time: '10:15',
-    },
-  ]);
   const [input, setInput] = useState('');
-  const [typing, setTyping] = useState(false);
   const [attachment, setAttachment] = useState(null);
-  const [responseIndex, setResponseIndex] = useState(0);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const {
+    messages,
+    sending,
+    loadingHistory,
+    sendMessage,
+    startNewConversation,
+  } = useAiChat({ roleContext: 'patient', t });
 
   const quickActions = useMemo(
     () => [
@@ -100,47 +89,20 @@ function AIAssistantPageInner() {
     [t]
   );
 
-  const mockResponses = useMemo(
-    () => t('ai.patientPage.mocks', { returnObjects: true }) || [],
-    [t]
-  );
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, typing]);
+  }, [messages, sending]);
 
-  const handleSend = (text = input) => {
+  const handleSend = async (text = input) => {
     if (!text.trim() && !attachment) return;
-
-    const userMsg = {
-      id: createMessageId(),
-      role: 'user',
-      text: text.trim(),
-      file: attachment?.name || null,
-      time: getCurrentTime(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
+    const attachmentName = attachment?.name || null;
     setInput('');
     setAttachment(null);
-    setTyping(true);
-
-    window.setTimeout(() => {
-      const list = mockResponses.length ? mockResponses : [''];
-      const aiMsg = {
-        id: createMessageId(),
-        role: 'assistant',
-        text: list[responseIndex % list.length],
-        time: getCurrentTime(),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-      setTyping(false);
-      setResponseIndex((prev) => prev + 1);
-    }, 1500);
+    await sendMessage({ text: text.trim(), attachmentName });
   };
 
   const handleKeyDown = (e) => {
@@ -156,7 +118,7 @@ function AIAssistantPageInner() {
   };
 
   const handleQuickAction = (label) => {
-    handleSend(label);
+    handleSend(label).catch(() => {});
   };
 
   return (
@@ -179,6 +141,7 @@ function AIAssistantPageInner() {
         <div className="hidden lg:flex items-center gap-2">
           <button
             type="button"
+            onClick={() => startNewConversation().catch(() => {})}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
           >
             {t('ai.patientPage.newChat')}
@@ -190,6 +153,7 @@ function AIAssistantPageInner() {
         <aside className="hidden lg:flex w-64 bg-slate-50 border-s border-slate-200 flex-col p-4 gap-3 overflow-y-auto shrink-0">
           <button
             type="button"
+            onClick={() => startNewConversation().catch(() => {})}
             className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
           >
             {t('ai.patientPage.newChat')}
@@ -228,7 +192,7 @@ function AIAssistantPageInner() {
             {messages.map((msg) => (
               <Message key={msg.id} msg={msg} />
             ))}
-            {typing && <TypingIndicator />}
+            {(sending || loadingHistory) && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </div>
 
@@ -262,8 +226,8 @@ function AIAssistantPageInner() {
             <div className="flex items-end gap-2">
               <button
                 type="button"
-                onClick={() => handleSend()}
-                disabled={!input.trim() && !attachment}
+                onClick={() => handleSend().catch(() => {})}
+                disabled={(!input.trim() && !attachment) || sending}
                 className="w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl flex items-center justify-center transition-colors shrink-0 shadow-sm"
               >
                 <Send size={16} />

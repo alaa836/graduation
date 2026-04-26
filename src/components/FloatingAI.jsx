@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Send, Mic, Bot, Minimize2, Maximize2 } from 'lucide-react';
+import { useAiChat } from '../hooks/useAiChat';
 
 function createMessageId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -11,9 +12,13 @@ function FloatingAIInner({ role = 'patient' }) {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
   const [pulse, setPulse] = useState(true);
   const messagesEndRef = useRef(null);
+  const roleContext = role === 'doctor' ? 'doctor' : 'patient';
+  const { messages: persistedMessages, sending, loadingHistory, sendMessage } = useAiChat({
+    roleContext,
+    t,
+  });
 
   const localeTag = i18n.language?.startsWith('en') ? 'en-GB' : 'ar-EG';
 
@@ -23,30 +28,25 @@ function FloatingAIInner({ role = 'patient' }) {
     return Array.isArray(arr) ? arr : [];
   }, [t, role]);
 
-  const mockReplies = useMemo(() => {
-    const key = role === 'doctor' ? 'ai.floating.mocksDoctor' : 'ai.floating.mocksPatient';
-    const arr = t(key, { returnObjects: true });
-    return Array.isArray(arr) ? arr : [];
-  }, [t, role]);
-
-  const pickMockReply = useCallback(() => {
-    if (!mockReplies.length) {
-      return role === 'doctor' ? t('ai.floating.initialDoctor') : t('ai.floating.initialPatient');
+  const initialText = role === 'doctor' ? t('ai.floating.initialDoctor') : t('ai.floating.initialPatient');
+  const messages = useMemo(() => {
+    if (!persistedMessages.length) {
+      return [
+        {
+          id: createMessageId(),
+          from: 'ai',
+          text: initialText,
+          time: new Date().toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }),
+        },
+      ];
     }
-    return mockReplies[Math.floor(Math.random() * mockReplies.length)];
-  }, [mockReplies, role, t]);
-
-  const buildInitialMessage = useCallback(
-    () => ({
-      id: createMessageId(),
-      from: 'ai',
-      text: role === 'doctor' ? t('ai.floating.initialDoctor') : t('ai.floating.initialPatient'),
-      time: new Date().toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }),
-    }),
-    [t, localeTag, role]
-  );
-
-  const [messages, setMessages] = useState(() => [buildInitialMessage()]);
+    return persistedMessages.map((msg) => ({
+      id: msg.id,
+      from: msg.role === 'assistant' ? 'ai' : 'user',
+      text: msg.text,
+      time: msg.time || new Date().toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }),
+    }));
+  }, [persistedMessages, initialText, localeTag]);
 
   useEffect(() => {
     if (open) {
@@ -57,26 +57,10 @@ function FloatingAIInner({ role = 'patient' }) {
     }
   }, [messages, open]);
 
-  const getCurrentTime = () =>
-    new Date().toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
-
-  const sendMessage = (text) => {
-    if (!text.trim() || loading) return;
-    const userMsg = { id: createMessageId(), from: 'user', text, time: getCurrentTime() };
-    setMessages((prev) => [...prev, userMsg]);
+  const handleSendMessage = async (text) => {
+    if (!text.trim() || sending) return;
     setInput('');
-    setLoading(true);
-
-    window.setTimeout(() => {
-      const aiMsg = {
-        id: createMessageId(),
-        from: 'ai',
-        text: pickMockReply(),
-        time: getCurrentTime(),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-      setLoading(false);
-    }, 1200);
+    await sendMessage({ text });
   };
 
   const panelStyle = {
@@ -142,7 +126,7 @@ function FloatingAIInner({ role = 'patient' }) {
               </div>
             ))}
 
-            {loading && (
+            {(sending || loadingHistory) && (
               <div className="flex items-end gap-2">
                 <div className="w-7 h-7 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
                   <Bot size={14} className="text-white" />
@@ -169,7 +153,7 @@ function FloatingAIInner({ role = 'patient' }) {
                 <button
                   key={action}
                   type="button"
-                  onClick={() => sendMessage(action)}
+                  onClick={() => handleSendMessage(action).catch(() => {})}
                   className="flex-shrink-0 text-xs bg-blue-50 text-blue-600 font-semibold px-3 py-1.5 rounded-xl hover:bg-blue-100 transition-colors whitespace-nowrap"
                 >
                   {action}
@@ -182,8 +166,8 @@ function FloatingAIInner({ role = 'patient' }) {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => sendMessage(input)}
-                disabled={!input.trim() || loading}
+                onClick={() => handleSendMessage(input).catch(() => {})}
+                disabled={!input.trim() || sending}
                 className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 hover:bg-blue-700 transition-colors disabled:opacity-40"
               >
                 <Send size={15} className="text-white" style={{ transform: i18n.language?.startsWith('en') ? 'none' : 'scaleX(-1)' }} />
@@ -192,7 +176,7 @@ function FloatingAIInner({ role = 'patient' }) {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendMessage(input)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(input).catch(() => {})}
                 placeholder={t('ai.floating.placeholder')}
                 className="flex-1 text-sm text-end bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               />

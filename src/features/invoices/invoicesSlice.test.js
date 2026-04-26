@@ -10,8 +10,6 @@ describe('invoicesSlice', () => {
         loading: false,
         payLoading: false,
         error: 'x',
-        usingMock: false,
-        infoMessage: null,
       },
       clearError()
     );
@@ -27,19 +25,18 @@ describe('invoicesSlice', () => {
       loading: false,
       payLoading: true,
       error: null,
-      usingMock: false,
-      infoMessage: null,
     };
     const s = invoicesReducer(
       start,
       payInvoice.fulfilled(
-        { invoiceId: 1, ok: true },
+        { invoiceId: 1, paymentMethod: 'card', ok: true },
         '',
         { invoiceId: 1 },
         null
       )
     );
     expect(s.invoices[0].status).toBe('تم الدفع');
+    expect(s.invoices[0].paymentMethod).toBe('card');
     expect(s.payLoading).toBe(false);
   });
 });

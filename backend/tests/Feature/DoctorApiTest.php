@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Appointment;
 use App\Models\Prescription;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -47,5 +48,50 @@ class DoctorApiTest extends TestCase
 
         $this->deleteJson("/api/doctor/prescriptions/{$rx->id}")
             ->assertStatus(403);
+    }
+
+    public function test_doctor_can_create_appointment_for_patient(): void
+    {
+        $doctor = User::factory()->doctor()->create();
+        $patient = User::factory()->patient()->create();
+        Appointment::create([
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'appointment_date' => now()->subDay()->toDateString(),
+            'appointment_time' => '10:00:00',
+            'status' => 'completed',
+            'notes' => null,
+        ]);
+
+        Sanctum::actingAs($doctor);
+
+        $this->postJson('/api/doctor/appointments', [
+            'patient_id' => $patient->id,
+            'appointment_date' => now()->addDay()->toDateString(),
+            'appointment_time' => '14:30',
+            'notes' => 'Follow-up',
+        ])->assertCreated()
+            ->assertJsonPath('appointment.patient_id', $patient->id)
+            ->assertJsonPath('appointment.doctor_id', $doctor->id)
+            ->assertJsonPath('appointment.status', 'confirmed');
+
+        $this->assertDatabaseHas('appointments', [
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'status' => 'confirmed',
+        ]);
+    }
+
+    public function test_doctor_cannot_create_appointment_for_non_patient_user(): void
+    {
+        $doctor = User::factory()->doctor()->create();
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($doctor);
+
+        $this->postJson('/api/doctor/appointments', [
+            'patient_id' => $admin->id,
+            'appointment_date' => now()->addDay()->toDateString(),
+            'appointment_time' => '11:00',
+        ])->assertStatus(422);
     }
 }

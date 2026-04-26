@@ -1,11 +1,18 @@
-import { createElement, useEffect, useMemo, useState } from 'react';
+import { createElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, Clock, CheckCircle, XCircle, Eye, Calendar } from 'lucide-react';
+import { Search, Plus, Clock, CheckCircle, XCircle, Eye, Calendar, RefreshCw } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { translateAppointmentStatus } from '../../utils/i18nStatus';
 import axiosInstance from '../../api/axiosInstance';
-import { DOCTOR } from '../../api/endpoints';
+import { DOCTOR, DOCTOR_API } from '../../api/endpoints';
 import { getApiErrorMessage } from '../../utils/apiError';
+
+function localDateInputValue(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 export default function DoctorAppointmentsPage() {
   const { t } = useTranslation();
@@ -13,6 +20,14 @@ export default function DoctorAppointmentsPage() {
   const [appointments, setAppointments] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [patientsForSelect, setPatientsForSelect] = useState([]);
+  const [loadingPatients, setLoadingPatients] = useState(false);
+  const [savingAppointment, setSavingAppointment] = useState(false);
+  const [formPatientId, setFormPatientId] = useState('');
+  const [formDate, setFormDate] = useState(() => localDateInputValue());
+  const [formTime, setFormTime] = useState('09:00');
+  const [formNotes, setFormNotes] = useState('');
 
   const loadSchedules = async () => {
     setLoading(true);
@@ -41,6 +56,52 @@ export default function DoctorAppointmentsPage() {
     loadSchedules();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, []);
+
+  const openAddModal = useCallback(async () => {
+    setFormPatientId('');
+    setFormDate(localDateInputValue());
+    setFormTime('09:00');
+    setFormNotes('');
+    setShowAddModal(true);
+    setLoadingPatients(true);
+    try {
+      const res = await axiosInstance.get(DOCTOR_API.PATIENTS);
+      const list = res.data?.patients || [];
+      setPatientsForSelect(Array.isArray(list) ? list : []);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('doctor.appointments.loadPatientsErr')));
+      setPatientsForSelect([]);
+    } finally {
+      setLoadingPatients(false);
+    }
+  }, [toast, t]);
+
+  const closeAddModal = useCallback(() => {
+    setShowAddModal(false);
+  }, []);
+
+  const submitNewAppointment = async () => {
+    if (!formPatientId) {
+      toast.error(t('doctor.appointments.selectPatientPh'));
+      return;
+    }
+    setSavingAppointment(true);
+    try {
+      await axiosInstance.post(DOCTOR_API.APPOINTMENTS, {
+        patient_id: Number(formPatientId),
+        appointment_date: formDate,
+        appointment_time: formTime.slice(0, 5),
+        notes: formNotes.trim() || undefined,
+      });
+      toast.success(t('doctor.appointments.successAdded'));
+      closeAddModal();
+      await loadSchedules();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, t('authErrors.default')));
+    } finally {
+      setSavingAppointment(false);
+    }
+  };
 
   const filtered = useMemo(
     () => appointments.filter((a) => a.name.includes(search) || a.type.includes(search) || a.pid.includes(search)),
@@ -90,21 +151,32 @@ export default function DoctorAppointmentsPage() {
   return (
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex items-start justify-between flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={loadSchedules}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
-        >
-          <Plus size={15} />
-          {loading ? t('common.loading') : t('doctor.appointments.addBtn')}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={loadSchedules}
+            disabled={loading}
+            className="flex items-center gap-2 border border-gray-200 bg-white text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            {loading ? t('common.loading') : t('doctor.appointments.refreshBtn')}
+          </button>
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={15} />
+            {t('doctor.appointments.addBtn')}
+          </button>
+        </div>
         <div className="text-start">
           <h1 className="text-xl md:text-2xl font-extrabold text-gray-800">{t('doctor.appointments.title')}</h1>
           <p className="text-gray-400 text-sm mt-0.5">{t('doctor.appointments.subtitle')}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {stats.map(({ label, value, color, bg, icon }) => (
           <div key={label} className="card-hover bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-4 flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
@@ -211,6 +283,97 @@ export default function DoctorAppointmentsPage() {
           </div>
         </div>
       </div>
+
+      {showAddModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          role="presentation"
+          onClick={closeAddModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="doctor-add-appt-title"
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 text-start space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="doctor-add-appt-title" className="text-lg font-extrabold text-gray-800">
+              {t('doctor.appointments.modalTitle')}
+            </h2>
+            <p className="text-xs text-gray-500">{t('doctor.appointments.modalHint')}</p>
+
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-gray-600">{t('doctor.appointments.fieldPatient')}</span>
+              <select
+                value={formPatientId}
+                onChange={(e) => setFormPatientId(e.target.value)}
+                disabled={loadingPatients}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">{t('doctor.appointments.selectPatientPh')}</option>
+                {patientsForSelect.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              {!loadingPatients && patientsForSelect.length === 0 ? (
+                <p className="text-xs text-amber-600 mt-1">{t('doctor.appointments.patientsListEmpty')}</p>
+              ) : null}
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-gray-600">{t('doctor.appointments.fieldDate')}</span>
+                <input
+                  type="date"
+                  value={formDate}
+                  onChange={(e) => setFormDate(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-gray-600">{t('doctor.appointments.fieldTime')}</span>
+                <input
+                  type="time"
+                  value={formTime}
+                  onChange={(e) => setFormTime(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="text-xs font-semibold text-gray-600">{t('doctor.appointments.fieldNotes')}</span>
+              <textarea
+                value={formNotes}
+                onChange={(e) => setFormNotes(e.target.value)}
+                rows={3}
+                placeholder={t('doctor.appointments.phNotes')}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeAddModal}
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50"
+              >
+                {t('doctor.appointments.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={submitNewAppointment}
+                disabled={savingAppointment || loadingPatients}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {savingAppointment ? t('common.loading') : t('doctor.appointments.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

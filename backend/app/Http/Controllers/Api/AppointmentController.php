@@ -69,7 +69,7 @@ class AppointmentController extends Controller
         $validated = $request->validate([
             'appointment_date' => ['sometimes', 'date'],
             'appointment_time' => ['sometimes', 'date_format:H:i'],
-            'status' => ['sometimes', Rule::in(['pending', 'confirmed', 'completed', 'cancelled'])],
+            'status' => ['sometimes', Rule::in(Appointment::STATUSES)],
             'notes' => ['nullable', 'string'],
         ]);
 

@@ -4,9 +4,9 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -34,6 +34,7 @@ class User extends Authenticatable
         'address',
         'date_of_birth',
         'avatar',
+        'specialty',
         'role',
         'is_active',
         'password',
@@ -78,5 +79,10 @@ class User extends Authenticatable
     public function medicalRecord(): HasOne
     {
         return $this->hasOne(MedicalRecord::class, 'patient_id');
+    }
+
+    public function aiConversations(): HasMany
+    {
+        return $this->hasMany(AiConversation::class, 'user_id');
     }
 }

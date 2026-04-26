@@ -10,6 +10,7 @@ use App\Models\Prescription;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class DoctorController extends Controller
 {
@@ -22,21 +23,30 @@ class DoctorController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', '%'.$search.'%')
                     ->orWhere('email', 'like', '%'.$search.'%')
-                    ->orWhere('phone', 'like', '%'.$search.'%');
+                    ->orWhere('phone', 'like', '%'.$search.'%')
+                    ->orWhere('specialty', 'like', '%'.$search.'%')
+                    ->orWhere('area', 'like', '%'.$search.'%');
             });
+        }
+
+        if ($specialty = $request->query('specialty')) {
+            $query->where('specialty', 'like', '%'.$specialty.'%');
         }
 
         $doctors = $query
             ->orderByDesc('id')
             ->limit(50)
-            ->get(['id', 'name', 'email', 'phone', 'gender', 'date_of_birth', 'avatar']);
+            ->get([
+                'id', 'name', 'email', 'phone', 'gender', 'date_of_birth', 'avatar',
+                'specialty', 'governorate', 'area', 'address',
+            ]);
 
         return response()->json(['doctors' => $doctors]);
     }
 
     public function slots(User $doctor): JsonResponse
     {
-        if ($doctor->role !== 'doctor' || !$doctor->is_active) {
+        if ($doctor->role !== 'doctor' || ! $doctor->is_active) {
             return response()->json(['message' => 'Doctor not found.'], 404);
         }
 
@@ -60,7 +70,7 @@ class DoctorController extends Controller
 
             $slots = [];
             foreach (['09:00', '10:00', '11:00', '12:00', '13:00', '17:00', '18:00', '19:00'] as $time) {
-                if (!in_array($time, $takenTimes, true)) {
+                if (! in_array($time, $takenTimes, true)) {
                     $slots[] = $time;
                 }
             }
@@ -79,6 +89,10 @@ class DoctorController extends Controller
                 'email' => $doctor->email,
                 'phone' => $doctor->phone,
                 'avatar' => $doctor->avatar,
+                'specialty' => $doctor->specialty,
+                'governorate' => $doctor->governorate,
+                'area' => $doctor->area,
+                'address' => $doctor->address,
             ],
             'days' => $days,
         ]);
@@ -92,6 +106,10 @@ class DoctorController extends Controller
             'phone' => ['nullable', 'string', 'max:30'],
             'gender' => ['nullable', 'in:male,female'],
             'date_of_birth' => ['nullable', 'date'],
+            'specialty' => ['nullable', 'string', 'max:191'],
+            'governorate' => ['nullable', 'string', 'max:120'],
+            'area' => ['nullable', 'string', 'max:120'],
+            'address' => ['nullable', 'string', 'max:2000'],
             'avatar' => ['nullable', 'image', 'max:2048'],
         ]);
 
@@ -117,13 +135,42 @@ class DoctorController extends Controller
         return response()->json(['schedules' => $appointments]);
     }
 
+    public function storeAppointment(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'patient_id' => ['required', 'integer', 'exists:users,id'],
+            'appointment_date' => ['required', 'date'],
+            'appointment_time' => ['required', 'date_format:H:i'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $patient = User::where('id', $validated['patient_id'])->where('role', 'patient')->first();
+        if (! $patient) {
+            return response()->json(['message' => 'Invalid patient.'], 422);
+        }
+
+        $appointment = Appointment::create([
+            'patient_id' => $validated['patient_id'],
+            'doctor_id' => $request->user()->id,
+            'appointment_date' => $validated['appointment_date'],
+            'appointment_time' => $validated['appointment_time'],
+            'notes' => $validated['notes'] ?? null,
+            'status' => 'confirmed',
+        ]);
+
+        return response()->json([
+            'message' => 'Appointment created successfully',
+            'appointment' => $appointment->load(['patient:id,name,email', 'doctor:id,name,email']),
+        ], 201);
+    }
+
     public function editSchedule(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'appointment_id' => ['required', 'integer', 'exists:appointments,id'],
             'appointment_date' => ['sometimes', 'date'],
             'appointment_time' => ['sometimes', 'date_format:H:i'],
-            'status' => ['sometimes', 'in:pending,confirmed,completed,cancelled'],
+            'status' => ['sometimes', Rule::in(Appointment::STATUSES)],
             'notes' => ['nullable', 'string'],
         ]);
 
@@ -158,7 +205,7 @@ class DoctorController extends Controller
             ->map(function ($items) use ($careByPatient) {
                 $latest = $items->first();
                 $patient = $latest?->patient;
-                if (!$patient) {
+                if (! $patient) {
                     return null;
                 }
 
@@ -186,7 +233,7 @@ class DoctorController extends Controller
     {
         $patientUser = User::where('id', $patient)->where('role', 'patient')->first();
 
-        if (!$patientUser) {
+        if (! $patientUser) {
             return response()->json(['message' => 'Patient not found.'], 404);
         }
 
@@ -196,7 +243,7 @@ class DoctorController extends Controller
             ->where('patient_id', $patientUser->id)
             ->exists();
 
-        if (!$hasAppointment) {
+        if (! $hasAppointment) {
             return response()->json(['message' => 'Patient not found in your list.'], 404);
         }
 
@@ -309,12 +356,14 @@ class DoctorController extends Controller
 
     public function deletePrescription(Request $request, int $prescription): JsonResponse
     {
-        $model = Prescription::where('id', $prescription)
-            ->where('doctor_id', $request->user()->id)
-            ->first();
+        $model = Prescription::where('id', $prescription)->first();
 
-        if (!$model) {
+        if (! $model) {
             return response()->json(['message' => 'Prescription not found.'], 404);
+        }
+
+        if ($model->doctor_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         $model->delete();
@@ -324,12 +373,14 @@ class DoctorController extends Controller
 
     public function updatePrescription(Request $request, int $prescription): JsonResponse
     {
-        $model = Prescription::where('id', $prescription)
-            ->where('doctor_id', $request->user()->id)
-            ->first();
+        $model = Prescription::where('id', $prescription)->first();
 
-        if (!$model) {
+        if (! $model) {
             return response()->json(['message' => 'Prescription not found.'], 404);
+        }
+
+        if ($model->doctor_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         $validated = $request->validate([
@@ -350,7 +401,7 @@ class DoctorController extends Controller
             ->where('doctor_id', $request->user()->id)
             ->first();
 
-        if (!$model) {
+        if (! $model) {
             return response()->json(['message' => 'Report not found.'], 404);
         }
 

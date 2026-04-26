@@ -87,7 +87,7 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(({ label, value, icon, iconBg }) => (
           <div key={label} className="card-hover bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-4 text-start">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ms-auto ${iconBg}`}>
@@ -167,7 +167,7 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {quickActions.map(({ label, icon, to, color }) => (
               <Link key={label} to={to} className={`flex flex-col items-center gap-2 p-4 rounded-2xl text-center transition-all shadow-sm ${color}`}>
                 <div className="w-10 h-10 bg-white/60 rounded-xl flex items-center justify-center">{createElement(icon, { size: 20 })}</div>

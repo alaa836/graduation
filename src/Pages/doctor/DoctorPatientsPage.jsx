@@ -61,7 +61,7 @@ function AddPatientModal({ onClose, onSave }) {
           <h3 className="font-bold text-gray-800 text-lg text-start flex-1">{t('doctor.patients.modalTitle')}</h3>
         </div>
         <p className="text-gray-400 text-xs text-start mb-4">{t('doctor.patients.modalHint')}</p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
             { label: t('doctor.patients.fieldFullName'), name: 'name', placeholder: t('doctor.patients.phFullName') },
             { label: t('doctor.patients.fieldNationalId'), name: 'nationalId', placeholder: t('doctor.patients.phNationalId') },
@@ -107,7 +107,7 @@ function AddPatientModal({ onClose, onSave }) {
               ))}
             </select>
           </div>
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="block text-xs font-semibold text-gray-600 mb-1 text-start">{t('doctor.patients.fieldHistory')}</label>
             <textarea
               value={form.medicalHistory}

@@ -17,6 +17,7 @@ const prefetchDashboardByPath = {
   '/dashboard/appointments': () => Promise.all([import('./AppointmentsPage')]),
   '/dashboard/medical-records': () => Promise.all([import('./MedicalRecordsPage')]),
   '/dashboard/invoices': () => Promise.all([import('./InvoicesPage')]),
+  '/dashboard/payment-status': () => Promise.all([import('./PaymentStatusPage')]),
   '/dashboard/ai-assistant': () => Promise.all([import('./AIAssistantPage')]),
 };
 

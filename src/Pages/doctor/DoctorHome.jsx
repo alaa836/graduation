@@ -153,7 +153,7 @@ export default function DoctorHome() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(({ label, value, sub, icon, color }) => (
           <div key={label} className="card-hover bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-4 text-start">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ms-auto ${color}`}>
@@ -196,7 +196,7 @@ export default function DoctorHome() {
             <img src={nextAppointment.img} alt="" className="w-20 h-20 rounded-2xl object-cover shrink-0" />
           </div>
 
-          <div className="grid grid-cols-3 gap-3 mt-5 pt-4 border-t border-gray-100">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5 pt-4 border-t border-gray-100">
             {[
               { label: t('doctor.home.quickRx'), icon: '📋', to: '/doctor/prescriptions' },
               { label: t('doctor.home.quickPatients'), icon: '👤', to: '/doctor/patients' },

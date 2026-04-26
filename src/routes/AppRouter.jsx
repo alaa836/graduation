@@ -22,6 +22,7 @@ const BookingPage = lazy(() => import('../Pages/dashboard/BookingPage'));
 const AppointmentsPage = lazy(() => import('../Pages/dashboard/AppointmentsPage'));
 const MedicalRecordsPage = lazy(() => import('../Pages/dashboard/MedicalRecordsPage'));
 const InvoicesPage = lazy(() => import('../Pages/dashboard/InvoicesPage'));
+const PaymentStatusPage = lazy(() => import('../Pages/dashboard/PaymentStatusPage'));
 const AIAssistantPage = lazy(() => import('../Pages/dashboard/AIAssistantPage'));
 const PatientProfilePage = lazy(() => import('../Pages/dashboard/PatientProfilePage'));
 
@@ -88,6 +89,7 @@ export default function AppRouter() {
             <Route path="appointments" element={<AppointmentsPage />} />
             <Route path="medical-records" element={<MedicalRecordsPage />} />
             <Route path="invoices" element={<InvoicesPage />} />
+            <Route path="payment-status" element={<PaymentStatusPage />} />
             <Route path="ai-assistant" element={<AIAssistantPage />} />
             <Route path="profile" element={<PatientProfilePage />} />
           </Route>

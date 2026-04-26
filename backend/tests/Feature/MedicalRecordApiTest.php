@@ -19,6 +19,7 @@ class MedicalRecordApiTest extends TestCase
         $this->putJson('/api/medical-records', [
             'allergies' => 'Peanuts',
             'chronic_conditions' => '—',
+            'blood_pressure' => '120/80',
         ])
             ->assertOk()
             ->assertJsonPath('message', 'Medical record updated successfully');

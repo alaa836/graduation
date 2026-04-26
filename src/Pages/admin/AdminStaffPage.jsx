@@ -87,7 +87,7 @@ function AddAdminModal({ onClose, onSave }) {
               <User size={15} className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1 text-start">{t('admin.staff.fieldEmail')}</label>
               <div className="relative">

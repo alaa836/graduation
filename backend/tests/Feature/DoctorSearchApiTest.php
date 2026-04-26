@@ -32,4 +32,17 @@ class DoctorSearchApiTest extends TestCase
             ->assertOk()
             ->assertJsonStructure(['days', 'doctor']);
     }
+
+    public function test_patient_can_filter_doctors_by_specialty(): void
+    {
+        User::factory()->doctor()->create(['specialty' => 'باطنة']);
+        User::factory()->doctor()->create(['specialty' => 'طب الأسنان']);
+        $patient = User::factory()->patient()->create();
+        Sanctum::actingAs($patient);
+
+        $this->getJson('/api/doctors/search?specialty=باطنة')
+            ->assertOk()
+            ->assertJsonCount(1, 'doctors')
+            ->assertJsonPath('doctors.0.specialty', 'باطنة');
+    }
 }

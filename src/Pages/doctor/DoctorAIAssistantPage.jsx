@@ -1,15 +1,7 @@
 import { createElement, useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Send, Mic, Paperclip, Bot, User, FileText, Users, Stethoscope, ClipboardList, X } from 'lucide-react';
-
-function createMessageId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function getCurrentTime() {
-  const now = new Date();
-  return `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-}
+import { useAiChat } from '../../hooks/useAiChat';
 
 function TypingIndicator() {
   return (
@@ -29,23 +21,25 @@ function TypingIndicator() {
 }
 
 function Message({ msg }) {
-  const isDoctor = msg.role === 'doctor';
+  const isUser = msg.role === 'user';
   return (
-    <div className={`flex items-end gap-2 justify-start ${isDoctor ? 'flex-row-reverse' : ''}`}>
-      {!isDoctor && (
+    <div className={`flex items-end gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
+      {!isUser && (
         <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
           <Bot size={16} className="text-white" />
         </div>
       )}
-      <div className={`max-w-xs md:max-w-md lg:max-w-lg flex flex-col gap-1 ${isDoctor ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-xs md:max-w-md lg:max-w-lg flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${
-            isDoctor ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white text-gray-700 rounded-bl-sm shadow-sm'
+            isUser
+              ? 'bg-blue-600 text-white rounded-br-sm'
+              : 'bg-white text-gray-700 border border-slate-200 rounded-bl-sm shadow-sm'
           }`}
         >
           {msg.text}
           {msg.file && (
-            <div className={`mt-2 flex items-center gap-2 text-xs ${isDoctor ? 'text-blue-100' : 'text-gray-400'}`}>
+            <div className={`mt-2 flex items-center gap-2 text-xs ${isUser ? 'text-blue-100' : 'text-gray-400'}`}>
               <FileText size={13} />
               <span>{msg.file}</span>
             </div>
@@ -53,7 +47,7 @@ function Message({ msg }) {
         </div>
         <span className="text-xs text-gray-400 px-1">{msg.time}</span>
       </div>
-      {isDoctor && (
+      {isUser && (
         <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
           <User size={16} className="text-gray-600" />
         </div>
@@ -64,20 +58,14 @@ function Message({ msg }) {
 
 function DoctorAIAssistantPageInner() {
   const { t } = useTranslation();
-  const [messages, setMessages] = useState(() => [
-    {
-      id: createMessageId(),
-      role: 'assistant',
-      text: t('ai.doctorPage.initial'),
-      time: '10:00',
-    },
-  ]);
   const [input, setInput] = useState('');
-  const [typing, setTyping] = useState(false);
   const [attachment, setAttachment] = useState(null);
-  const [responseIndex, setResponseIndex] = useState(0);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const { messages, sending, loadingHistory, sendMessage, startNewConversation } = useAiChat({
+    roleContext: 'doctor',
+    t,
+  });
 
   const quickActions = useMemo(
     () => [
@@ -89,37 +77,16 @@ function DoctorAIAssistantPageInner() {
     [t]
   );
 
-  const mockResponses = useMemo(() => t('ai.doctorPage.mocks', { returnObjects: true }) || [], [t]);
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, typing]);
+  }, [messages, sending]);
 
-  const handleSend = (text = input) => {
+  const handleSend = async (text = input) => {
     if (!text.trim() && !attachment) return;
-    const userMsg = {
-      id: createMessageId(),
-      role: 'doctor',
-      text: text.trim(),
-      file: attachment?.name || null,
-      time: getCurrentTime(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    const attachmentName = attachment?.name || null;
     setInput('');
     setAttachment(null);
-    setTyping(true);
-    setTimeout(() => {
-      const list = mockResponses.length ? mockResponses : [''];
-      const aiMsg = {
-        id: createMessageId(),
-        role: 'assistant',
-        text: list[responseIndex % list.length],
-        time: getCurrentTime(),
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-      setTyping(false);
-      setResponseIndex((prev) => prev + 1);
-    }, 1500);
+    await sendMessage({ text: text.trim(), attachmentName });
   };
 
   return (
@@ -130,6 +97,13 @@ function DoctorAIAssistantPageInner() {
           <span>{t('ai.doctorPage.online')}</span>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => startNewConversation().catch(() => {})}
+            className="hidden md:inline-flex items-center gap-2 border border-gray-200 bg-white text-gray-600 px-3 py-2 rounded-xl text-sm font-semibold hover:border-blue-400 hover:text-blue-600 transition-colors"
+          >
+            {t('ai.doctorPage.newChat')}
+          </button>
           <div className="text-start">
             <h2 className="font-bold text-gray-800">{t('ai.doctorPage.title')}</h2>
             <p className="text-xs text-gray-400">{t('ai.doctorPage.subtitle')}</p>
@@ -144,7 +118,7 @@ function DoctorAIAssistantPageInner() {
         {messages.map((msg) => (
           <Message key={msg.id} msg={msg} />
         ))}
-        {typing && <TypingIndicator />}
+        {(sending || loadingHistory) && <TypingIndicator />}
         <div ref={messagesEndRef} />
       </div>
 
@@ -153,7 +127,7 @@ function DoctorAIAssistantPageInner() {
           <button
             key={label}
             type="button"
-            onClick={() => handleSend(label)}
+            onClick={() => handleSend(label).catch(() => {})}
             className="shrink-0 flex items-center gap-1.5 bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-xl text-xs font-semibold hover:border-blue-400 hover:text-blue-600 transition-all"
           >
             {createElement(icon, { size: 13 })}
@@ -178,8 +152,8 @@ function DoctorAIAssistantPageInner() {
         <div className="flex items-end gap-2">
           <button
             type="button"
-            onClick={() => handleSend()}
-            disabled={!input.trim() && !attachment}
+            onClick={() => handleSend().catch(() => {})}
+            disabled={(!input.trim() && !attachment) || sending}
             className="w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl flex items-center justify-center transition-colors shrink-0"
           >
             <Send size={16} />

@@ -66,6 +66,11 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'role' => 'doctor',
+            'specialty' => fake()->randomElement([
+                'باطنة', 'قلب وأوعية دموية', 'طب الأسنان', 'طب الأطفال', 'مخ وأعصاب',
+            ]),
+            'governorate' => 'بني سويف',
+            'area' => fake()->randomElement(['مركز الواسطى', 'مركز ببا', 'مركز سمسطا', 'بني سويف']),
         ]);
     }
 

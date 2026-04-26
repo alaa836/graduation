@@ -1,48 +1,35 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../../context/ToastContext';
-import { translateAppointmentStatus } from '../../utils/i18nStatus';
 import { Search, Calendar } from 'lucide-react';
 import axiosInstance from '../../api/axiosInstance';
 import { ADMIN } from '../../api/endpoints';
 import { getApiErrorMessage } from '../../utils/apiError';
 
-const FILTER_VALUES = ['الكل', 'مؤكد', 'جاري', 'مكتمل', 'ملغي'];
+/** يطابق `Appointment::STATUSES` في الباكند */
+const API_STATUSES = ['pending', 'confirmed', 'inProgress', 'completed', 'cancelled'];
 
-const STATUS_STYLES = {
-  مؤكد: 'bg-blue-100 text-blue-600',
-  confirmed: 'bg-blue-100 text-blue-600',
-  جاري: 'bg-green-100 text-green-600',
-  inProgress: 'bg-green-100 text-green-600',
-  مكتمل: 'bg-gray-100 text-gray-500',
-  completed: 'bg-gray-100 text-gray-500',
-  ملغي: 'bg-red-100 text-red-500',
-  cancelled: 'bg-red-100 text-red-500',
-  pending: 'bg-yellow-100 text-yellow-600',
-};
+const FILTER_TABS = [
+  { id: 'all', labelKey: 'admin.appointments.statAll' },
+  { id: 'pending', labelKey: 'appointments.status.waiting' },
+  { id: 'confirmed', labelKey: 'appointments.status.confirmed' },
+  { id: 'inProgress', labelKey: 'appointments.status.inProgress' },
+  { id: 'completed', labelKey: 'appointments.status.completed' },
+  { id: 'cancelled', labelKey: 'appointments.status.cancelled' },
+];
 
-function filterLabelKey(v) {
-  if (v === 'الكل') return 'admin.appointments.statAll';
-  if (v === 'مؤكد') return 'appointments.status.confirmed';
-  if (v === 'جاري') return 'appointments.status.inProgress';
-  if (v === 'مكتمل') return 'appointments.status.completed';
-  return 'appointments.status.cancelled';
-}
-
-function StatusBadge({ status, t }) {
-  return (
-    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLES[status] || 'bg-gray-100 text-gray-500'}`}>
-      {translateAppointmentStatus(status, t)}
-    </span>
-  );
+function statusOptionLabelKey(v) {
+  if (v === 'pending') return 'appointments.status.waiting';
+  return `appointments.status.${v}`;
 }
 
 export default function AdminAppointmentsPage() {
   const { t } = useTranslation();
   const [appointments, setAppointments] = useState([]);
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('الكل');
+  const [filterId, setFilterId] = useState('all');
   const [loading, setLoading] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
   const toast = useToast();
 
   const loadAppointments = async () => {
@@ -53,7 +40,7 @@ export default function AdminAppointmentsPage() {
         id: a.id,
         patient: a.patient?.name || '-',
         doctor: a.doctor?.name || '-',
-        specialty: '-',
+        specialty: a.doctor?.specialty || '—',
         date: a.appointment_date || '-',
         time: a.appointment_time || '-',
         status: a.status || 'pending',
@@ -71,29 +58,53 @@ export default function AdminAppointmentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, []);
 
-  const filtered = useMemo(() => appointments.filter((a) => {
-    const matchSearch = a.patient.includes(search) || a.doctor.includes(search) || a.specialty.includes(search);
-    const matchStatus = filterStatus === 'الكل' || a.status === filterStatus || (filterStatus === 'مؤكد' && a.status === 'confirmed') || (filterStatus === 'جاري' && a.status === 'inProgress') || (filterStatus === 'مكتمل' && a.status === 'completed') || (filterStatus === 'ملغي' && a.status === 'cancelled');
-    return matchSearch && matchStatus;
-  }), [appointments, search, filterStatus]);
+  const filtered = useMemo(
+    () =>
+      appointments.filter((a) => {
+        const s = (search || '').trim().toLowerCase();
+        const matchSearch =
+          !s ||
+          a.patient.toLowerCase().includes(s) ||
+          a.doctor.toLowerCase().includes(s) ||
+          (a.specialty && String(a.specialty).toLowerCase().includes(s));
+        const matchStatus = filterId === 'all' || a.status === filterId;
+        return matchSearch && matchStatus;
+      }),
+    [appointments, search, filterId]
+  );
 
-  const handleCancel = async (id) => {
+  const handleStatusChange = async (id, newStatus) => {
+    const row = appointments.find((x) => x.id === id);
+    if (!row || row.status === newStatus) return;
+    setUpdatingId(id);
     try {
-      await axiosInstance.patch(ADMIN.APPOINTMENTS + `/${id}`, { status: 'cancelled' });
-      setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'cancelled' } : a)));
-      toast.warning(t('admin.appointments.cancelledToast'));
+      await axiosInstance.patch(ADMIN.APPOINTMENTS + `/${id}`, { status: newStatus });
+      setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a)));
+      toast.success(t('admin.appointments.statusUpdated'));
     } catch (err) {
-      toast.error(getApiErrorMessage(err, t('authErrors.default')));
+      toast.error(getApiErrorMessage(err, t('admin.appointments.statusUpdateError')));
+    } finally {
+      setUpdatingId(null);
     }
   };
 
-  const stats = [
-    { label: t('admin.appointments.statAll'), value: appointments.length, color: 'text-gray-600' },
-    { label: t('appointments.status.confirmed'), value: appointments.filter((a) => a.status === 'confirmed' || a.status === 'مؤكد').length, color: 'text-blue-600' },
-    { label: t('appointments.status.inProgress'), value: appointments.filter((a) => a.status === 'inProgress' || a.status === 'جاري').length, color: 'text-green-600' },
-    { label: t('appointments.status.completed'), value: appointments.filter((a) => a.status === 'completed' || a.status === 'مكتمل').length, color: 'text-gray-500' },
-    { label: t('appointments.status.cancelled'), value: appointments.filter((a) => a.status === 'cancelled' || a.status === 'ملغي').length, color: 'text-red-500' },
-  ];
+  const stats = FILTER_TABS.map(({ id, labelKey }) => ({
+    id,
+    label: t(labelKey),
+    value: id === 'all' ? appointments.length : appointments.filter((a) => a.status === id).length,
+    color:
+      id === 'all'
+        ? 'text-gray-600'
+        : id === 'pending'
+          ? 'text-amber-600'
+          : id === 'confirmed'
+            ? 'text-blue-600'
+            : id === 'inProgress'
+              ? 'text-green-600'
+              : id === 'completed'
+                ? 'text-gray-500'
+                : 'text-red-500',
+  }));
 
   return (
     <div className="p-4 md:p-6 space-y-6 min-h-screen">
@@ -102,29 +113,29 @@ export default function AdminAppointmentsPage() {
         <p className="text-gray-500 text-sm mt-1">{loading ? t('common.loading') : t('admin.appointments.subtitle')}</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {stats.map(({ label, value, color }) => (
-          <div key={label} className="card-hover bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-sm flex items-center justify-between gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {stats.map(({ id, label, value, color }) => (
+          <div key={id} className="card-hover bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-sm flex items-center justify-between gap-2">
             <span className={`text-2xl font-extrabold ${color}`}>{value}</span>
-            <span className="text-xs text-gray-400 font-semibold text-start">{label}</span>
+            <span className="text-xs text-gray-400 font-semibold text-start leading-tight">{label}</span>
           </div>
         ))}
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 overflow-x-auto">
-          {FILTER_VALUES.map((s) => (
+        <div className="flex gap-1 bg-white rounded-xl shadow-sm p-1 overflow-x-auto max-w-full">
+          {FILTER_TABS.map((tab) => (
             <button
-              key={s}
+              key={tab.id}
               type="button"
-              onClick={() => setFilterStatus(s)}
+              onClick={() => setFilterId(tab.id)}
               className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                filterStatus === s
+                filterId === tab.id
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-gray-800 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50/70'
               }`}
             >
-              {t(filterLabelKey(s))}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>
@@ -141,13 +152,12 @@ export default function AdminAppointmentsPage() {
       </div>
 
       <div className="card-hover-panel bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm overflow-hidden">
-        <div className="hidden md:grid grid-cols-6 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 text-center">
-          <span>{t('admin.appointments.colAction')}</span>
-          <span>{t('admin.appointments.colStatus')}</span>
-          <span>{t('admin.appointments.colTimeDate')}</span>
-          <span>{t('admin.appointments.colSpec')}</span>
-          <span>{t('admin.appointments.colDoctor')}</span>
+        <div className="hidden md:grid grid-cols-5 gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 text-center">
           <span className="text-start">{t('admin.appointments.colPatient')}</span>
+          <span>{t('admin.appointments.colDoctor')}</span>
+          <span>{t('admin.appointments.colSpec')}</span>
+          <span>{t('admin.appointments.colTimeDate')}</span>
+          <span>{t('admin.appointments.colStatus')}</span>
         </div>
         <div className="divide-y divide-gray-50">
           {filtered.length === 0 ? (
@@ -156,55 +166,61 @@ export default function AdminAppointmentsPage() {
               <p>{t('admin.appointments.empty')}</p>
             </div>
           ) : (
-            filtered.map((apt) => (
-              <div key={apt.id} className="px-4 md:px-5 py-4">
-                <div className="md:hidden space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <StatusBadge status={apt.status} t={t} />
+            filtered.map((apt) => {
+              const busy = updatingId === apt.id;
+              return (
+                <div key={apt.id} className="px-4 md:px-5 py-4">
+                  <div className="md:hidden space-y-3">
                     <div className="text-start min-w-0">
                       <p className="font-bold text-gray-800 text-sm">{apt.patient}</p>
                       <p className="text-xs text-gray-400">
-                        {apt.doctor} - {apt.date}
+                        {apt.doctor} · {apt.date} {apt.time}
                       </p>
                     </div>
-                  </div>
-                  {(apt.status === 'مؤكد' || apt.status === 'confirmed') && (
-                    <button
-                      type="button"
-                      onClick={() => handleCancel(apt.id)}
-                      className="w-full border border-red-200 text-red-500 text-xs font-semibold py-2 rounded-xl hover:bg-red-50 transition-colors"
-                    >
-                      {t('admin.appointments.cancelMobile')}
-                    </button>
-                  )}
-                </div>
-                <div className="hidden md:grid grid-cols-6 gap-3 items-center text-center">
-                  <div className="flex justify-center">
-                    {(apt.status === 'مؤكد' || apt.status === 'confirmed') ? (
-                      <button
-                        type="button"
-                        onClick={() => handleCancel(apt.id)}
-                        className="text-xs font-semibold border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                    <label className="block text-start text-xs font-semibold text-gray-500">
+                      {t('admin.appointments.colStatus')}
+                      <select
+                        value={apt.status}
+                        disabled={busy}
+                        onChange={(e) => void handleStatusChange(apt.id, e.target.value)}
+                        aria-label={t('admin.appointments.statusSelectAria')}
+                        className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-start bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                       >
-                        {t('admin.appointments.cancelShort')}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-gray-300">—</span>
-                    )}
+                        {API_STATUSES.map((v) => (
+                          <option key={v} value={v}>
+                            {t(statusOptionLabelKey(v))}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
-                  <div className="flex justify-center">
-                    <StatusBadge status={apt.status} t={t} />
+                  <div className="hidden md:grid grid-cols-5 gap-3 items-center text-center">
+                    <span className="text-sm font-semibold text-gray-800 text-start">{apt.patient}</span>
+                    <span className="text-sm text-gray-700">{apt.doctor}</span>
+                    <span className="text-xs text-gray-500">{apt.specialty}</span>
+                    <div>
+                      <p className="text-xs font-bold text-gray-700">{apt.time}</p>
+                      <p className="text-xs text-gray-400">{apt.date}</p>
+                    </div>
+                    <div className="flex justify-center min-w-0">
+                      <select
+                        value={apt.status}
+                        disabled={busy}
+                        onChange={(e) => void handleStatusChange(apt.id, e.target.value)}
+                        aria-label={t('admin.appointments.statusSelectAria')}
+                        className="max-w-full border border-gray-200 rounded-xl px-2 py-1.5 text-xs text-start bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                      >
+                        {API_STATUSES.map((v) => (
+                          <option key={v} value={v}>
+                            {t(statusOptionLabelKey(v))}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-gray-700">{apt.time}</p>
-                    <p className="text-xs text-gray-400">{apt.date}</p>
-                  </div>
-                  <span className="text-xs text-gray-500">{apt.specialty}</span>
-                  <span className="text-sm text-gray-700">{apt.doctor}</span>
-                  <span className="text-sm font-semibold text-gray-800 text-start">{apt.patient}</span>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

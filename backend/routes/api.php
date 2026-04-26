@@ -1,11 +1,14 @@
 <?php
 
-use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AiController;
 use App\Http\Controllers\Api\AppointmentController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DoctorController;
+use App\Http\Controllers\Api\MedicalRecordAttachmentController;
 use App\Http\Controllers\Api\MedicalRecordController;
 use App\Http\Controllers\Api\PatientController;
-use App\Http\Controllers\Api\DoctorController;
-use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\PaymentWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -22,6 +25,9 @@ Route::prefix('auth')->group(function () {
     });
 });
 
+Route::post('/payments/webhook', PaymentWebhookController::class)
+    ->middleware('throttle:120,1');
+
 Route::middleware(['auth:sanctum', 'role:patient'])->group(function () {
     Route::get('/doctors/search', [DoctorController::class, 'search']);
     Route::get('/doctors/{doctor}/slots', [DoctorController::class, 'slots']);
@@ -33,19 +39,28 @@ Route::middleware(['auth:sanctum', 'role:patient'])->group(function () {
 
     Route::get('/medical-records', [MedicalRecordController::class, 'show']);
     Route::put('/medical-records', [MedicalRecordController::class, 'update']);
+    Route::post('/medical-records/attachments', [MedicalRecordAttachmentController::class, 'store']);
+    Route::get('/medical-records/attachments/{attachment}/download', [MedicalRecordAttachmentController::class, 'download']);
+    Route::delete('/medical-records/attachments/{attachment}', [MedicalRecordAttachmentController::class, 'destroy']);
 
     Route::post('/patient/profile', [PatientController::class, 'updateProfile']);
 
     Route::get('/invoices', [PatientController::class, 'listInvoices']);
+    Route::get('/invoices/{invoiceRef}', [PatientController::class, 'invoiceByRef'])->where('invoiceRef', '[A-Za-z0-9#\\-._]+');
     Route::post('/invoices/{invoiceRef}/pay', [PatientController::class, 'payInvoice'])->where('invoiceRef', '[A-Za-z0-9#\\-._]+');
 });
 
-// AI chat — مخطط لاحقاً (الواجهة تستخدم ردود mock محلياً؛ أضف AiController عند التفعيل)
-// Route::middleware('throttle:20,1')->post('/ai/chat', [AiController::class, 'chat']);
+Route::middleware(['auth:sanctum', 'throttle:30,1'])->group(function () {
+    Route::get('/ai/conversations', [AiController::class, 'conversations']);
+    Route::post('/ai/conversations', [AiController::class, 'createConversation']);
+    Route::get('/ai/conversations/{conversation}/messages', [AiController::class, 'messages']);
+    Route::post('/ai/messages', [AiController::class, 'sendMessage']);
+});
 
 Route::middleware(['auth:sanctum', 'role:doctor'])->group(function () {
     Route::post('/doctor/profile', [DoctorController::class, 'updateProfile']);
     Route::get('/doctor/schedule', [DoctorController::class, 'allSchedules']);
+    Route::post('/doctor/appointments', [DoctorController::class, 'storeAppointment']);
     Route::put('/doctor/schedule', [DoctorController::class, 'editSchedule']);
     Route::get('/doctor/patients', [DoctorController::class, 'patients']);
     Route::get('/doctor/patients/{patient}', [DoctorController::class, 'patientById']);
@@ -87,4 +102,9 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     Route::get('/invoices', [AdminController::class, 'invoicesReport']);
     Route::get('/settings', [AdminController::class, 'getSettings']);
     Route::put('/settings', [AdminController::class, 'updateSettings']);
+
+    Route::get('/ai-knowledge', [AdminController::class, 'aiKnowledgeList']);
+    Route::post('/ai-knowledge', [AdminController::class, 'aiKnowledgeStore']);
+    Route::put('/ai-knowledge/{entry}', [AdminController::class, 'aiKnowledgeUpdate']);
+    Route::delete('/ai-knowledge/{entry}', [AdminController::class, 'aiKnowledgeDestroy']);
 });

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Appointment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -53,6 +54,29 @@ class AdminApiTest extends TestCase
         $this->getJson('/api/admin/invoices')
             ->assertOk()
             ->assertJsonStructure(['invoices', 'summary']);
+    }
+
+    public function test_admin_can_update_appointment_status_including_in_progress(): void
+    {
+        $doctor = User::factory()->doctor()->create();
+        $patient = User::factory()->patient()->create();
+        $appointment = Appointment::create([
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'appointment_date' => '2026-04-28',
+            'appointment_time' => '10:00:00',
+            'status' => 'pending',
+            'notes' => null,
+        ]);
+
+        $admin = User::factory()->admin()->create();
+        Sanctum::actingAs($admin);
+
+        $this->patchJson("/api/admin/appointments/{$appointment->id}", [
+            'status' => 'inProgress',
+        ])
+            ->assertOk()
+            ->assertJsonPath('appointment.status', 'inProgress');
     }
 
     public function test_admin_settings_get_and_update(): void

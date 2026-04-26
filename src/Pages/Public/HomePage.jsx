@@ -12,6 +12,7 @@ import {
   UserRound, Calendar, ChevronDown,
 } from 'lucide-react';
 import { PUBLIC_DOCTORS } from '../../data/publicDoctors';
+import { getDoctorProfiles, getSpecialtyOptionsFromDoctors, matchesSpecialty, SPECIALTY_ALL_AR } from '../../utils/specialtyFilter';
 
 /** Survives React Strict Mode remounts so sections do not flip back to hidden. */
 const sectionRevealDone = new Set();
@@ -59,13 +60,27 @@ const SPECIALTY_ICONS = ['❤️', '🧠', '👶', '🦷', '🏃', '👁️'];
 function Hero() {
   const { t, i18n } = useTranslation();
   const [specialty, setSpecialty] = useState('');
+  const [doctorSearch, setDoctorSearch] = useState('');
   const [doctorId, setDoctorId] = useState('');
   const [apptDate, setApptDate] = useState('');
 
-  const specialtyOptions = useMemo(() => {
-    const v = t('home.specialties', { returnObjects: true });
-    return Array.isArray(v) ? v : [];
-  }, [t]);
+  const doctorProfiles = useMemo(() => getDoctorProfiles(PUBLIC_DOCTORS), []);
+  const specialtyOptions = useMemo(() => getSpecialtyOptionsFromDoctors(doctorProfiles), [doctorProfiles]);
+
+  const doctorsForSpecialty = useMemo(
+    () => doctorProfiles.filter((d) => matchesSpecialty(d.specialty, specialty || SPECIALTY_ALL_AR)),
+    [doctorProfiles, specialty]
+  );
+
+  const doctorsForSearch = useMemo(
+    () =>
+      doctorsForSpecialty.filter((d) =>
+        String(d.name || '')
+          .toLowerCase()
+          .includes(String(doctorSearch || '').toLowerCase())
+      ),
+    [doctorSearch, doctorsForSpecialty]
+  );
 
   const today = useMemo(() => {
     const d = new Date();
@@ -74,7 +89,7 @@ function Hero() {
 
   const bookingTo = useMemo(() => {
     const q = new URLSearchParams();
-    if (specialty) q.set('specialty', specialty);
+    if (specialty && specialty !== SPECIALTY_ALL_AR) q.set('specialty', specialty);
     if (doctorId) q.set('doctor', doctorId);
     if (apptDate) q.set('date', apptDate);
     const qs = q.toString();
@@ -125,8 +140,8 @@ function Hero() {
                     >
                       <option value="">{t('home.hero.booking.phSpecialty')}</option>
                       {specialtyOptions.map((opt) => (
-                        <option key={opt.label} value={opt.label}>
-                          {opt.label}
+                        <option key={opt} value={opt}>
+                          {opt}
                         </option>
                       ))}
                     </select>
@@ -135,6 +150,22 @@ function Hero() {
                       aria-hidden
                     />
                   </div>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {specialtyOptions.slice(0, 8).map((s) => (
+                      <button
+                        key={`hero-chip-${s}`}
+                        type="button"
+                        onClick={() => setSpecialty(s === SPECIALTY_ALL_AR ? '' : s)}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                          (specialty || SPECIALTY_ALL_AR) === s
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="min-w-0">
@@ -142,6 +173,14 @@ function Hero() {
                     <UserRound className="w-5 h-5 text-blue-500 shrink-0" strokeWidth={2} />
                     <span className="text-sm font-bold">{t('home.hero.booking.doctor')}</span>
                   </div>
+                  <input
+                    type="text"
+                    className={`${fieldClass} mb-2`}
+                    value={doctorSearch}
+                    onChange={(e) => setDoctorSearch(e.target.value)}
+                    placeholder={t('admin.doctors.searchPh')}
+                    aria-label={t('admin.doctors.searchPh')}
+                  />
                   <div className="relative">
                     <select
                       className={fieldClass}
@@ -150,9 +189,9 @@ function Hero() {
                       aria-label={t('home.hero.booking.doctor')}
                     >
                       <option value="">{t('home.hero.booking.phDoctor')}</option>
-                      {PUBLIC_DOCTORS.map((d) => (
+                      {doctorsForSearch.map((d) => (
                         <option key={d.id} value={String(d.id)}>
-                          {d.name} — {d.specialty}
+                          {d.name} — {d.specialty}{d.center ? ` — ${d.center}` : ''}
                         </option>
                       ))}
                     </select>
@@ -257,7 +296,7 @@ function Doctors() {
             )}
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           {doctors.map((doc, i) => (
             <div
               key={doc.id}
@@ -270,14 +309,21 @@ function Doctors() {
                 <img
                   src={doc.img}
                   alt={doc.name}
-                  className="w-full h-36 md:h-40 object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:group-hover:scale-100"
+                  className="block w-full h-36 md:h-40 object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:group-hover:scale-100"
                 />
               </div>
               <div className="px-3.5 pt-3 pb-4 text-center">
+                {doc.center && (
+                  <span className="inline-block text-[10px] font-semibold text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded-full mb-1">
+                    {doc.center}
+                  </span>
+                )}
                 <p className="font-bold text-gray-800 text-sm md:text-base">{doc.name}</p>
                 <p className="text-cyan-600 text-xs md:text-sm mt-1 font-semibold">{doc.specialty}</p>
-                <p className="text-[11px] md:text-xs text-gray-400 mt-2 leading-relaxed min-h-8">
-                  {t('home.doctors.subtitle')} - {doc.reviews}+ {t('home.doctors.viewAll')}
+                <p className="text-[11px] md:text-xs text-gray-400 mt-2 leading-relaxed min-h-8 line-clamp-2">
+                  {doc.center
+                    ? [doc.subtitle, doc.address].filter(Boolean).join(' — ') || doc.notes || ''
+                    : `${t('home.doctors.subtitle')} - ${doc.reviews}+`}
                 </p>
                 <Link
                   to={`/login?doctor=${doc.id}`}

@@ -151,7 +151,7 @@ export default function AdminHome() {
         <p className="text-gray-500 text-sm mt-1 text-start">{loading ? t('common.loading') : t('admin.home.subtitle')}</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map(({ label, value, change, up, icon, color }) => (
           <div key={label} className="card-hover bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between">

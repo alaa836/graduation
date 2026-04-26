@@ -15,13 +15,19 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::factory()->admin()->create([
+        $adminDefaults = User::factory()->admin()->make([
             'name' => 'Main Admin',
             'email' => 'admin@lesahtak.com',
             'password' => 'password123',
-        ]);
+        ])->toArray();
 
-        User::factory()->doctor()->count(3)->create();
+        User::query()->updateOrCreate(
+            ['email' => 'admin@lesahtak.com'],
+            $adminDefaults
+        );
+
+        $this->call(DoctorCatalogSeeder::class);
+        $this->call(AiKnowledgeSeeder::class);
         User::factory()->patient()->count(8)->create();
     }
 }

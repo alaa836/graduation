@@ -163,7 +163,7 @@ function PatientRecordsModal({ patient, onClose, onAddRecord }) {
 
         <div className="p-5 border-b border-gray-100">
           <p className="font-bold text-gray-700 text-start mb-3">{t('doctor.records.vitalsTitle')}</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             {vitalsConfig.map(({ icon, label, value, color }) => (
               <div key={label} className={`rounded-xl p-3 flex items-center gap-2 ${color.split(' ')[0]}`}>
                 {createElement(icon, { size: 16, className: color.split(' ')[1] })}

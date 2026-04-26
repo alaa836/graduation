@@ -1,11 +1,14 @@
-import { createElement, useEffect, useState } from 'react';
+import { createElement, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import { Download, CreditCard, Banknote, Smartphone, FileText, X, CheckCircle } from 'lucide-react';
-import { clearError, clearInfo, fetchInvoices, payInvoice } from '../../features/invoices/invoicesSlice';
+import { clearError, fetchInvoices, payInvoice } from '../../features/invoices/invoicesSlice';
 import AsyncState from '../../components/AsyncState';
 import { translateInvoiceStatus } from '../../utils/i18nStatus';
+import { downloadTextFile } from '../../utils/downloadTextFile';
+import { buildAccountStatementCsv, buildSingleInvoiceCsv } from '../../utils/patientInvoiceCsv';
 
 function StatusBadge({ status, t }) {
   const label = translateInvoiceStatus(status, t);
@@ -104,7 +107,7 @@ function PayModal({ invoice, onClose, onSuccess, loading }) {
                   <CreditCard size={16} className="absolute end-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1 text-start">{t('patient.invoices.cvv')}</label>
                   <input
@@ -173,8 +176,9 @@ const UNPAID = 'لم يتم الدفع';
 export default function InvoicesPage() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const toast = useToast();
-  const { invoices, summary, loading, payLoading, error, infoMessage } = useSelector((state) => state.invoices);
+  const { invoices, summary, loading, payLoading, error } = useSelector((state) => state.invoices);
   const [payModal, setPayModal] = useState(null);
   const [successModal, setSuccessModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -191,16 +195,17 @@ export default function InvoicesPage() {
     }
   }, [dispatch, error, toast]);
 
-  useEffect(() => {
-    if (infoMessage) {
-      toast.info(t('common.demoDataNotice'));
-      dispatch(clearInfo());
-    }
-  }, [dispatch, infoMessage, toast, t]);
-
   const handlePaySuccess = async (id, paymentMethod, cardData) => {
     const result = await dispatch(payInvoice({ invoiceId: id, paymentMethod, cardData }));
     if (payInvoice.fulfilled.match(result)) {
+      if (result.payload?.pending_confirmation) {
+        if (result.payload?.payment_url) {
+          window.open(result.payload.payment_url, '_blank', 'noopener,noreferrer');
+        }
+        toast.info(t('patient.invoices.paymentStatusRedirectHint'));
+        navigate(`/dashboard/payment-status?invoice=${encodeURIComponent(id)}&state=pending`);
+        return true;
+      }
       toast.success(t('patient.invoices.paySuccessToast'));
       setSuccessModal(true);
       return true;
@@ -214,6 +219,28 @@ export default function InvoicesPage() {
   const from = (currentPage - 1) * perPage + 1;
   const to = Math.min(currentPage * perPage, invoices.length);
 
+  const handleDownloadStatement = useCallback(() => {
+    if (invoices.length === 0) {
+      toast.error(t('patient.invoices.exportEmpty'));
+      return;
+    }
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const csv = buildAccountStatementCsv({ summary, rows: invoices, t });
+    downloadTextFile(`account-statement-${dateStr}.csv`, csv);
+    toast.success(t('patient.invoices.exportSuccess'));
+  }, [invoices, summary, t, toast]);
+
+  const handleDownloadInvoiceRow = useCallback(
+    (inv) => {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const ref = String(inv.id ?? 'invoice').replace(/[/\\?%*:|"<>]/g, '-');
+      const csv = buildSingleInvoiceCsv(inv, t);
+      downloadTextFile(`invoice-${ref}-${dateStr}.csv`, csv);
+      toast.success(t('patient.invoices.exportOneSuccess'));
+    },
+    [t, toast]
+  );
+
   const summaryCards = [
     { label: t('patient.invoices.summaryCount'), value: `${summary.total} ${t('patient.invoices.invoiceWord')}`, icon: FileText, color: 'bg-blue-50 text-blue-600' },
     { label: t('patient.invoices.summaryPending'), value: `${summary.pending} ج.م`, icon: X, color: 'bg-yellow-50 text-yellow-500' },
@@ -223,7 +250,11 @@ export default function InvoicesPage() {
   return (
     <div className="p-4 md:p-6 space-y-6 min-h-screen">
       <div className="flex items-start justify-between flex-wrap gap-3">
-        <button type="button" className="flex items-center gap-2 border border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors">
+        <button
+          type="button"
+          onClick={handleDownloadStatement}
+          className="flex items-center gap-2 border border-gray-200 text-gray-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors"
+        >
           <Download size={15} />
           {t('patient.invoices.download')}
         </button>
@@ -283,7 +314,11 @@ export default function InvoicesPage() {
                         {t('patient.invoices.payNow')}
                       </button>
                     ) : (
-                      <button type="button" className="flex-1 flex items-center justify-center gap-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-xl text-xs hover:bg-gray-50 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadInvoiceRow(inv)}
+                        className="flex-1 flex items-center justify-center gap-1 border border-gray-200 text-gray-600 font-semibold py-2 rounded-xl text-xs hover:bg-gray-50 transition-colors"
+                      >
                         <Download size={12} />
                         {t('patient.invoices.downloadPdf')}
                       </button>
@@ -298,7 +333,11 @@ export default function InvoicesPage() {
                         {t('patient.invoices.payNow')}
                       </button>
                     ) : (
-                      <button type="button" className="flex items-center gap-1 border border-gray-200 text-gray-600 font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadInvoiceRow(inv)}
+                        className="flex items-center gap-1 border border-gray-200 text-gray-600 font-semibold px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50 transition-colors"
+                      >
                         <Download size={12} />
                         {t('patient.invoices.downloadPdf')}
                       </button>
