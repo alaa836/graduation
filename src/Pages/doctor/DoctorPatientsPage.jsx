@@ -11,14 +11,6 @@ const PATIENT_CARE_KEYS = ['active', 'follow_up', 'stable', 'archived'];
 const patientCareSelectClass =
   'max-w-full min-w-0 w-full text-xs border border-gray-200 rounded-lg py-1.5 px-2 bg-white text-gray-800 text-start focus:outline-none focus:ring-2 focus:ring-blue-500/30';
 
-/** معرفات سالبة = بيانات تجريبية فقط */
-const mockPatients = [
-  { id: -1, name: 'سارة أحمد الهاشمي', pid: '#MD-89241', age: 28, gender: 'أنثى', lastVisit: '12 أكتوبر 2023', img: 'https://randomuser.me/api/portraits/women/32.jpg', careStatus: 'active' },
-  { id: -2, name: 'فهد بن ناصر', pid: '#MD-77210', age: 45, gender: 'ذكر', lastVisit: '20 أكتوبر 2023', img: 'https://randomuser.me/api/portraits/men/44.jpg', careStatus: 'active' },
-  { id: -3, name: 'نورة القحطاني', pid: '#MD-90112', age: 34, gender: 'أنثى', lastVisit: '15 أكتوبر 2023', img: 'https://randomuser.me/api/portraits/women/55.jpg', careStatus: 'follow_up' },
-  { id: -4, name: 'خالد الشريف', pid: '#MD-44321', age: 52, gender: 'ذكر', lastVisit: '22 أكتوبر 2023', img: 'https://randomuser.me/api/portraits/men/60.jpg', careStatus: 'stable' },
-];
-
 function AddPatientModal({ onClose, onSave }) {
   const { t } = useTranslation();
   const [form, setForm] = useState({
@@ -28,26 +20,21 @@ function AddPatientModal({ onClose, onSave }) {
     gender: '',
     phone: '',
     email: '',
+    password: '',
     bloodType: '',
     medicalHistory: '',
   });
   const [loading, setLoading] = useState(false);
 
-  const handleSave = () => {
-    if (!form.name) return;
+  const handleSave = async () => {
+    if (!form.name?.trim() || !form.email?.trim() || !form.password || form.password.length < 8) return;
     setLoading(true);
-    setTimeout(() => {
-      onSave({
-        ...form,
-        id: Date.now(),
-        pid: `#MD-${Math.floor(Math.random() * 99999)}`,
-        age: 30,
-        lastVisit: 'اليوم',
-        img: `https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 80)}.jpg`,
-      });
-      setLoading(false);
+    try {
+      await onSave(form);
       onClose();
-    }, 800);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -68,6 +55,7 @@ function AddPatientModal({ onClose, onSave }) {
             { label: t('doctor.patients.fieldBirth'), name: 'birthDate', type: 'date' },
             { label: t('doctor.patients.fieldPhone'), name: 'phone', placeholder: t('doctor.patients.phPhone') },
             { label: t('doctor.patients.fieldEmail'), name: 'email', placeholder: t('doctor.patients.phEmail'), type: 'email' },
+            { label: t('doctor.patients.fieldPassword'), name: 'password', placeholder: t('doctor.patients.phPassword'), type: 'password' },
           ].map(({ label, name, placeholder, type = 'text' }) => (
             <div key={name}>
               <label className="block text-xs font-semibold text-gray-600 mb-1 text-start">{label}</label>
@@ -129,7 +117,7 @@ function AddPatientModal({ onClose, onSave }) {
           <button
             type="button"
             onClick={handleSave}
-            disabled={loading || !form.name}
+            disabled={loading || !form.name?.trim() || !form.email?.trim() || !form.password || form.password.length < 8}
             className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -228,11 +216,14 @@ function ViewPatientModal({ patient, onClose, onCareStatusChange }) {
 export default function DoctorPatientsPage() {
   const { t } = useTranslation();
   const toast = useToast();
-  const [patients, setPatients] = useState(mockPatients);
+  const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [viewPatient, setViewPatient] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const apiOrigin = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
+  const placeholderImg = 'https://randomuser.me/api/portraits/lego/2.jpg';
 
   const fetchPatients = async () => {
     setLoading(true);
@@ -240,19 +231,27 @@ export default function DoctorPatientsPage() {
       const res = await axiosInstance.get(DOCTOR_API.PATIENTS);
       const mapped = (res.data?.patients || []).map((p) => {
         const birth = p.date_of_birth ? new Date(p.date_of_birth) : null;
-        const age = birth ? Math.max(0, new Date().getFullYear() - birth.getFullYear()) : '-';
+        let age = '-';
+        if (birth && !Number.isNaN(birth.getTime())) {
+          age = Math.max(0, new Date().getFullYear() - birth.getFullYear());
+        }
         return {
           id: p.id,
           name: p.name,
           pid: `#MD-${p.id}`,
           age,
-          gender: p.gender === 'female' ? 'أنثى' : 'ذكر',
-          lastVisit: p.last_visit || '-',
-          img: 'https://randomuser.me/api/portraits/lego/2.jpg',
+          gender:
+            p.gender === 'female'
+              ? t('patient.profile.genderFemale')
+              : p.gender === 'male'
+                ? t('patient.profile.genderMale')
+                : p.gender || '—',
+          lastVisit: p.last_visit ? String(p.last_visit).slice(0, 10) : '-',
+          img: p.avatar ? `${apiOrigin}/storage/${p.avatar}` : placeholderImg,
           careStatus: p.care_status && PATIENT_CARE_KEYS.includes(p.care_status) ? p.care_status : 'active',
         };
       });
-      setPatients((prev) => (mapped.length > 0 ? mapped : prev));
+      setPatients(mapped);
     } catch (err) {
       toast.error(getApiErrorMessage(err, t('authErrors.default')));
     } finally {
@@ -266,12 +265,6 @@ export default function DoctorPatientsPage() {
   }, []);
 
   const patchPatientCareStatus = async (id, careStatus) => {
-    if (typeof id === 'number' && id < 0) {
-      setPatients((prev) => prev.map((x) => (x.id === id ? { ...x, careStatus } : x)));
-      setViewPatient((prev) => (prev && prev.id === id ? { ...prev, careStatus } : prev));
-      toast.success(t('doctor.patients.careStatusUpdated'));
-      return;
-    }
     try {
       await axiosInstance.put(DOCTOR_API.PATIENT_CARE_STATUS(id), { care_status: careStatus });
       setPatients((prev) => prev.map((x) => (x.id === id ? { ...x, careStatus } : x)));
@@ -342,6 +335,9 @@ export default function DoctorPatientsPage() {
           <span className="text-start">{t('doctor.patients.colName')}</span>
         </div>
         <div className="divide-y divide-gray-50">
+          {!loading && filtered.length === 0 && (
+            <div className="px-5 py-12 text-center text-sm text-gray-400">{t('doctor.patients.emptyList')}</div>
+          )}
           {filtered.map((p) => (
             <div key={p.id} className="px-5 py-4">
               <div className="md:hidden space-y-2">
@@ -444,9 +440,28 @@ export default function DoctorPatientsPage() {
       {showAdd && (
         <AddPatientModal
           onClose={() => setShowAdd(false)}
-          onSave={(p) => {
-            setPatients((prev) => [{ ...p, careStatus: 'active' }, ...prev]);
-            toast.success(t('doctor.patients.addSuccessNamed', { name: p.name }));
+          onSave={async (form) => {
+            try {
+              const gender =
+                form.gender === 'أنثى' || form.gender === 'female'
+                  ? 'female'
+                  : form.gender === 'ذكر' || form.gender === 'male'
+                    ? 'male'
+                    : null;
+              await axiosInstance.post(DOCTOR_API.PATIENTS, {
+                name: form.name.trim(),
+                email: form.email.trim(),
+                password: form.password,
+                phone: form.phone?.trim() || null,
+                gender,
+                date_of_birth: form.birthDate || null,
+              });
+              toast.success(t('doctor.patients.addSuccessNamed', { name: form.name.trim() }));
+              await fetchPatients();
+            } catch (err) {
+              toast.error(getApiErrorMessage(err, t('authErrors.default')));
+              throw err;
+            }
           }}
         />
       )}

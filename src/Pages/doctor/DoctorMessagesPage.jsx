@@ -2,44 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Send, Phone, Video, MoreVertical } from 'lucide-react';
 
-const mockConversations = [
-  {
-    id: 1, name: 'أحمد محمد علي', img: 'https://randomuser.me/api/portraits/men/32.jpg',
-    lastMessage: 'شكراً دكتور، هحافظ على الدواء', time: '10:30 ص', unread: 2,
-    messages: [
-      { id: 1, role: 'patient', text: 'السلام عليكم دكتور، عندي سؤال عن الدواء', time: '10:00 ص' },
-      { id: 2, role: 'doctor', text: 'أهلاً أحمد، تفضل اسأل', time: '10:05 ص' },
-      { id: 3, role: 'patient', text: 'هل ممكن آخذ الدواء على معدة فاضية؟', time: '10:10 ص' },
-      { id: 4, role: 'doctor', text: 'لا، لازم تاخده بعد الأكل عشان يحمي المعدة', time: '10:15 ص' },
-      { id: 5, role: 'patient', text: 'شكراً دكتور، هحافظ على الدواء', time: '10:30 ص' },
-    ]
-  },
-  {
-    id: 2, name: 'سارة خالد', img: 'https://randomuser.me/api/portraits/women/44.jpg',
-    lastMessage: 'الألم بدأ يقل الحمد لله', time: 'أمس', unread: 0,
-    messages: [
-      { id: 1, role: 'patient', text: 'دكتور، الظهر لسه بيوجعني', time: 'أمس 09:00 ص' },
-      { id: 2, role: 'doctor', text: 'هل عملتي التمارين اللي قلتها؟', time: 'أمس 09:10 ص' },
-      { id: 3, role: 'patient', text: 'آه عملتها كل يوم', time: 'أمس 09:15 ص' },
-      { id: 4, role: 'doctor', text: 'تمام، كمّلي وهتحسي بالفرق بعد أسبوع', time: 'أمس 09:20 ص' },
-      { id: 5, role: 'patient', text: 'الألم بدأ يقل الحمد لله', time: 'أمس 06:00 م' },
-    ]
-  },
-  {
-    id: 3, name: 'محمود عبد الله', img: 'https://randomuser.me/api/portraits/men/55.jpg',
-    lastMessage: 'امتى الموعد الجاي؟', time: 'منذ يومين', unread: 1,
-    messages: [
-      { id: 1, role: 'patient', text: 'دكتور، الركبة بتأثر على مشيتي', time: 'منذ يومين' },
-      { id: 2, role: 'doctor', text: 'لازم تلتزم بالراحة التامة', time: 'منذ يومين' },
-      { id: 3, role: 'patient', text: 'امتى الموعد الجاي؟', time: 'منذ يومين' },
-    ]
-  },
-];
-
+/**
+ * تتبع حقلي وظائفي: الواجهة جاهزة لربط رسائل حقيقية (WebSocket / API) لاحقاً.
+ * حالياً لا يوجد محادثات في قاعدة البيانات لهذه الصفحة.
+ */
 export default function DoctorMessagesPage() {
   const { t, i18n } = useTranslation();
-  const [conversations, setConversations] = useState(mockConversations);
-  const [selected, setSelected] = useState(mockConversations[0]);
+  const [conversations] = useState([]);
+  const [selected, setSelected] = useState(null);
   const [input, setInput] = useState('');
   const [search, setSearch] = useState('');
   const messagesEndRef = useRef(null);
@@ -50,23 +20,21 @@ export default function DoctorMessagesPage() {
 
   const handleSelect = (conv) => {
     setSelected(conv);
-    setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, unread: 0 } : c)));
   };
 
   const handleSend = () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !selected) return;
     const locale = i18n.language?.startsWith('en') ? 'en-GB' : 'ar-EG';
     const timeStr = new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     const newMsg = { id: Date.now(), role: 'doctor', text: input.trim(), time: timeStr };
     const updated = {
       ...selected,
-      messages: [...selected.messages, newMsg],
+      messages: [...(selected.messages || []), newMsg],
       lastMessage: input.trim(),
       time: t('doctor.messages.now'),
       unread: 0,
     };
     setSelected(updated);
-    setConversations((prev) => prev.map((c) => (c.id === selected.id ? updated : c)));
     setInput('');
   };
 
@@ -89,6 +57,9 @@ export default function DoctorMessagesPage() {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+          {filtered.length === 0 && (
+            <p className="px-4 py-8 text-sm text-gray-400 text-center leading-relaxed">{t('doctor.messages.emptyInbox')}</p>
+          )}
           {filtered.map((conv) => (
             <button
               key={conv.id}
@@ -152,7 +123,7 @@ export default function DoctorMessagesPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-            {selected.messages.map((msg) => (
+            {(selected.messages || []).map((msg) => (
               <div key={msg.id} className={`flex items-end gap-2 ${msg.role === 'doctor' ? 'justify-start' : 'justify-end'}`}>
                 {msg.role === 'doctor' && (
                   <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0 text-white text-xs font-bold">
@@ -201,9 +172,9 @@ export default function DoctorMessagesPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
-          <div className="text-center text-gray-400">
-            <p className="font-semibold">{t('doctor.messages.pickConversation')}</p>
+        <div className="flex-1 flex items-center justify-center bg-gray-50 px-6">
+          <div className="text-center text-gray-400 max-w-sm">
+            <p className="font-semibold text-gray-600">{conversations.length === 0 ? t('doctor.messages.emptyInbox') : t('doctor.messages.pickConversation')}</p>
           </div>
         </div>
       )}

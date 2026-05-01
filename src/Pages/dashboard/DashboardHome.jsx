@@ -1,40 +1,85 @@
-import { createElement, useMemo } from 'react';
+import { createElement, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import { useToast } from '../../context/ToastContext';
 import { Calendar, FileText, Upload, Clock, MapPin, Edit } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import axiosInstance from '../../api/axiosInstance';
+import { APPOINTMENTS, MEDICAL_RECORDS } from '../../api/endpoints';
+import { getApiErrorMessage } from '../../utils/apiError';
+import AsyncState from '../../components/AsyncState';
 
 export default function DashboardHome() {
   const { t } = useTranslation();
   const { user } = useSelector((s) => s.auth);
   const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState([]);
+  const [attachments, setAttachments] = useState([]);
   const profilePercent = 75;
 
-  const mockNext = useMemo(() => {
-    const v = t('patient.dashboardHome.mockNext', { returnObjects: true });
-    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-  }, [t]);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const [apptRes, medRes] = await Promise.all([
+          axiosInstance.get(APPOINTMENTS.LIST),
+          axiosInstance.get(MEDICAL_RECORDS.ROOT),
+        ]);
+        if (!mounted) return;
+        const apptRows = Array.isArray(apptRes.data)
+          ? apptRes.data
+          : Array.isArray(apptRes.data?.appointments)
+            ? apptRes.data.appointments
+            : [...(apptRes.data?.upcoming || []), ...(apptRes.data?.previous || [])];
+        setAppointments(apptRows);
+        setAttachments(Array.isArray(medRes.data?.attachments) ? medRes.data.attachments : []);
+      } catch (err) {
+        if (!mounted) return;
+        toast.error(getApiErrorMessage(err, t('patient.dashboardHome.loadError', { defaultValue: 'Failed to load dashboard data' })));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [t, toast]);
+
+  const upcoming = useMemo(
+    () => appointments.filter((a) => a.status !== 'completed' && a.status !== 'cancelled'),
+    [appointments]
+  );
+  const nextAppointment = useMemo(() => {
+    if (!upcoming.length) return null;
+    const sorted = [...upcoming].sort((a, b) => {
+      const da = new Date(`${a.appointment_date || a.date}T${String(a.appointment_time || a.time || '00:00:00').slice(0, 8)}`);
+      const db = new Date(`${b.appointment_date || b.date}T${String(b.appointment_time || b.time || '00:00:00').slice(0, 8)}`);
+      return da - db;
+    });
+    return sorted[0];
+  }, [upcoming]);
 
   const stats = useMemo(
     () => [
       {
         label: t('patient.dashboardHome.stats.nextAppt'),
-        value: t('patient.dashboardHome.stats.nextVal'),
+        value: nextAppointment ? String(nextAppointment.appointment_date || nextAppointment.date || '—') : '—',
         icon: Calendar,
         color: 'bg-blue-50 text-blue-600',
         iconBg: 'bg-blue-100',
       },
       {
         label: t('patient.dashboardHome.stats.appts'),
-        value: t('patient.dashboardHome.stats.apptsVal'),
+        value: String(appointments.length),
         icon: Calendar,
         color: 'bg-green-50 text-green-600',
         iconBg: 'bg-green-100',
       },
       {
         label: t('patient.dashboardHome.stats.docs'),
-        value: t('patient.dashboardHome.stats.docsVal'),
+        value: String(attachments.length),
         icon: FileText,
         color: 'bg-purple-50 text-purple-600',
         iconBg: 'bg-purple-100',
@@ -47,7 +92,7 @@ export default function DashboardHome() {
         iconBg: 'bg-red-100',
       },
     ],
-    [t, user?.bloodType]
+    [appointments.length, attachments.length, nextAppointment, t, user?.bloodType]
   );
 
   const quickActions = useMemo(
@@ -102,28 +147,30 @@ export default function DashboardHome() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         <div className="card-hover lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs text-blue-500 font-semibold px-2.5 py-1 bg-blue-50 rounded-full">{mockNext.type}</span>
+            <span className="text-xs text-blue-500 font-semibold px-2.5 py-1 bg-blue-50 rounded-full">
+              {nextAppointment ? t('patient.appointments.upcoming') : '—'}
+            </span>
             <h3 className="font-bold text-gray-800">{t('patient.dashboardHome.nextApptTitle')}</h3>
           </div>
           <div className="flex items-start gap-3">
-            <img src={img} alt={mockNext.doctor || ''} className="w-14 h-14 rounded-2xl object-cover flex-shrink-0" />
+            <img src={img} alt={nextAppointment?.doctor?.name || ''} className="w-14 h-14 rounded-2xl object-cover flex-shrink-0" />
             <div className="text-start flex-1">
-              <p className="font-extrabold text-gray-800">{mockNext.doctor}</p>
-              <p className="text-xs text-blue-500 mt-0.5">{mockNext.specialty}</p>
+              <p className="font-extrabold text-gray-800">{nextAppointment?.doctor?.name || '—'}</p>
+              <p className="text-xs text-blue-500 mt-0.5">{nextAppointment?.doctor?.specialty || '—'}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2">
             <div className="flex items-center justify-start gap-2 text-xs text-gray-500">
               <Calendar size={13} className="text-blue-400" />
-              <span>{mockNext.date}</span>
+              <span>{nextAppointment?.appointment_date || nextAppointment?.date || '—'}</span>
             </div>
             <div className="flex items-center justify-start gap-2 text-xs text-gray-500">
               <Clock size={13} className="text-blue-400" />
-              <span>{mockNext.time}</span>
+              <span>{nextAppointment?.appointment_time || nextAppointment?.time || '—'}</span>
             </div>
             <div className="flex items-center justify-start gap-2 text-xs text-gray-500">
               <MapPin size={13} className="text-blue-400" />
-              <span>{mockNext.location}</span>
+              <span>{nextAppointment?.doctor?.area || user?.area || '—'}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 mt-4">
@@ -177,6 +224,7 @@ export default function DashboardHome() {
           </div>
         </div>
       </div>
+      <AsyncState loading={loading} loadingText={t('common.loadingPage')} />
     </div>
   );
 }

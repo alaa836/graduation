@@ -105,7 +105,7 @@ export default function LoginPage() {
       return;
     }
 
-    const result = await dispatch(loginUser({ email: cleanIdentifier, password, role: selectedRole }));
+    const result = await dispatch(loginUser({ identifier: cleanIdentifier, password, role: selectedRole }));
     if (loginUser.fulfilled.match(result)) {
       const role = result.payload.user.role;
       toast.success(

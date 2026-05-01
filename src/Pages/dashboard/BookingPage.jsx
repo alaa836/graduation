@@ -166,39 +166,6 @@ export default function BookingPage() {
     }
   }, [toast, t]);
 
-  useEffect(() => {
-    if (loadingDoctors || doctors.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const results = await Promise.all(
-        doctors.map(async (doc) => {
-          try {
-            const daysList = await fetchDoctorSlots(doc.id);
-            return { id: doc.id, daysList };
-          } catch {
-            return { id: doc.id, daysList: [], failed: true };
-          }
-        })
-      );
-      if (cancelled) return;
-      setSlotsByDoctor((prev) => {
-        const next = { ...prev };
-        results.forEach(({ id, daysList }) => {
-          if (next[id] === undefined) {
-            next[id] = daysList;
-          }
-        });
-        return next;
-      });
-      if (results.some((r) => r.failed)) {
-        toast.error(t('patient.booking.errorLoadingSlots'));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [doctors, loadingDoctors, toast, t]);
-
   const filtered = doctors.filter((d) => {
     const matchSpec = matchesSpecialty(d.specialty, specialty);
     const matchGov = !governorate || d.location === governorate;
@@ -378,16 +345,18 @@ export default function BookingPage() {
                       </div>
                     </div>
                   ))}
-                {slotDays !== undefined && (
-                  <button
-                    type="button"
-                    disabled={slotsLoading}
-                    onClick={() => void refreshSlotsForDoctor(doc.id)}
-                    className="text-xs text-blue-600 underline text-start disabled:opacity-50"
-                  >
-                    {slotsLoading ? t('patient.booking.loadingSlots') : t('patient.booking.reloadSlots')}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={slotsLoading}
+                  onClick={() => void refreshSlotsForDoctor(doc.id)}
+                  className="text-xs text-blue-600 underline text-start disabled:opacity-50"
+                >
+                  {slotsLoading
+                    ? t('patient.booking.loadingSlots')
+                    : slotDays === undefined
+                      ? t('patient.booking.loadSlots')
+                      : t('patient.booking.reloadSlots')}
+                </button>
               </div>
 
               <button

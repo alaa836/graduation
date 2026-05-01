@@ -267,6 +267,9 @@ export default function DoctorRecordsPage() {
   const [loading, setLoading] = useState(false);
   const toast = useToast();
 
+  const apiOrigin = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
+  const placeholderRecordImg = 'https://randomuser.me/api/portraits/lego/3.jpg';
+
   const fetchDoctorRecordsData = async () => {
     setLoading(true);
     try {
@@ -316,7 +319,7 @@ export default function DoctorRecordsPage() {
           name: p.name,
           age,
           bloodType: 'N/A',
-          img: 'https://randomuser.me/api/portraits/lego/3.jpg',
+          img: p.avatar ? `${apiOrigin}/storage/${p.avatar}` : placeholderRecordImg,
           vitals: { bloodPressure: '-', sugar: '-', weight: '-', temperature: '-' },
           chronic: [],
           records: patientRecords,

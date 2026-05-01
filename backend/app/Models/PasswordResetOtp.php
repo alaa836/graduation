@@ -9,6 +9,8 @@ class PasswordResetOtp extends Model
 {
     protected $fillable = [
         'email',
+        'identifier',
+        'channel',
         'otp_hash',
         'attempts',
         'expires_at',

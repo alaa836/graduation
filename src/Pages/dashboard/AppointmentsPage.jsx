@@ -45,6 +45,57 @@ function CancelModal({ appointment, onConfirm, onCancel, loading, t }) {
   );
 }
 
+function DetailsModal({ appointment, onClose, t }) {
+  if (!appointment) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black bg-opacity-40" onClick={onClose} />
+      <div className="relative bg-white/90 backdrop-blur-md rounded-2xl shadow-xl p-6 w-full max-w-md z-10">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-gray-800 text-lg">{t('patient.appointments.details')}</h3>
+          <button type="button" onClick={onClose} className="text-gray-400">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          <img src={appointment.img} alt={appointment.doctorName} className="w-12 h-12 rounded-xl object-cover" />
+          <div className="text-start">
+            <p className="font-bold text-gray-800">{appointment.doctorName}</p>
+            <p className="text-blue-500 text-xs mt-0.5">{appointment.specialty}</p>
+          </div>
+        </div>
+
+        <div className="space-y-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2">
+            <StatusBadge status={appointment.status} t={t} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-blue-500" />
+            <span>{appointment.date}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock size={14} className="text-blue-500" />
+            <span>{appointment.time}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <MapPin size={14} className="text-blue-500" />
+            <span>{appointment.location}</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full mt-5 border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+        >
+          {t('common.close')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ status, t }) {
   const label = translateAppointmentStatus(status, t);
   const styles = {
@@ -62,6 +113,7 @@ export default function AppointmentsPage() {
   const { upcoming, previous, loading, error, infoMessage } = useSelector((state) => state.appointments);
   const [activeTab, setActiveTab] = useState('upcoming');
   const [cancelModal, setCancelModal] = useState(null);
+  const [detailsModal, setDetailsModal] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
 
   useEffect(() => {
@@ -167,7 +219,11 @@ export default function AppointmentsPage() {
                     <button type="button" onClick={() => setCancelModal(apt)} className="flex-1 border border-red-200 text-red-500 font-semibold py-2.5 rounded-xl text-sm hover:bg-red-50 transition-colors">
                       {t('patient.appointments.cancel')}
                     </button>
-                    <button type="button" className="flex-1 bg-blue-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => setDetailsModal(apt)}
+                      className="flex-1 bg-blue-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition-colors"
+                    >
                       {t('patient.appointments.details')}
                     </button>
                   </div>
@@ -254,6 +310,7 @@ export default function AppointmentsPage() {
       {cancelModal && (
         <CancelModal appointment={cancelModal} onConfirm={handleCancel} onCancel={() => setCancelModal(null)} loading={cancelLoading} t={t} />
       )}
+      {detailsModal && <DetailsModal appointment={detailsModal} onClose={() => setDetailsModal(null)} t={t} />}
     </div>
   );
 }

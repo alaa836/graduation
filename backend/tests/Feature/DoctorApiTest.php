@@ -82,6 +82,33 @@ class DoctorApiTest extends TestCase
         ]);
     }
 
+    public function test_doctor_can_register_patient_via_dashboard(): void
+    {
+        $doctor = User::factory()->doctor()->create();
+        Sanctum::actingAs($doctor);
+
+        $this->postJson('/api/doctor/patients', [
+            'name' => 'New Patient',
+            'email' => 'newpatient@example.com',
+            'password' => 'password123',
+            'gender' => 'male',
+        ])->assertCreated()
+            ->assertJsonPath('message', 'Patient created successfully');
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'newpatient@example.com',
+            'role' => 'patient',
+        ]);
+
+        $patient = User::where('email', 'newpatient@example.com')->first();
+        $this->assertNotNull($patient);
+
+        $this->assertDatabaseHas('appointments', [
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+        ]);
+    }
+
     public function test_doctor_cannot_create_appointment_for_non_patient_user(): void
     {
         $doctor = User::factory()->doctor()->create();

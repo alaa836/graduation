@@ -39,4 +39,20 @@ class AuthApiTest extends TestCase
             'password' => 'password12',
         ])->assertStatus(403);
     }
+
+    public function test_patient_can_login_with_phone_number(): void
+    {
+        $user = User::factory()->patient()->create([
+            'phone' => '01012345678',
+            'password' => 'password12',
+        ]);
+
+        $this->postJson('/api/auth/login', [
+            'identifier' => $user->phone,
+            'password' => 'password12',
+            'role' => 'patient',
+        ])->assertOk()
+            ->assertJsonStructure(['token', 'user', 'message'])
+            ->assertJsonPath('user.id', $user->id);
+    }
 }

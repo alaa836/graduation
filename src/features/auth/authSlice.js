@@ -6,9 +6,9 @@ import { clearAuthData, getStoredUser, getToken, setAuthData } from '../../utils
 
 export const loginUser = createAsyncThunk(
   'auth/login',
-  async ({ email, password, role }, { rejectWithValue }) => {
+  async ({ identifier, password, role }, { rejectWithValue }) => {
     try {
-      const res = await axiosInstance.post(AUTH.LOGIN, { email, password, role });
+      const res = await axiosInstance.post(AUTH.LOGIN, { identifier, password, role });
       const payload = {
         user: res.data.user,
         token: res.data.token,

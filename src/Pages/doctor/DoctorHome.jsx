@@ -9,97 +9,161 @@ import axiosInstance from '../../api/axiosInstance';
 import { DOCTOR, DOCTOR_API } from '../../api/endpoints';
 import { getApiErrorMessage } from '../../utils/apiError';
 
-const todayAppointments = [
-  { id: 1, name: 'سارة محمود', time: '09:30 - 10:00', type: 'استشارة طبية', status: 'مؤكد', done: false },
-  { id: 2, name: 'عمر خالد', time: '10:15 - 10:45', type: 'متابعة دورية', status: 'قيد الانتظار', done: false },
-  { id: 3, name: 'ليلى حسن', time: '11:00 - 11:30', type: 'استشارة طبية', status: 'مكتمل', done: true },
-];
+function localTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatTimeHm(raw) {
+  const s = String(raw || '');
+  if (!s) return '—';
+  return s.slice(0, 5);
+}
+
+function parseApptDateTime(dateStr, timeRaw) {
+  if (!dateStr) return null;
+  const t = String(timeRaw || '00:00:00').slice(0, 8);
+  const d = new Date(`${String(dateStr).slice(0, 10)}T${t}`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function findNextUpcoming(items) {
+  const now = new Date();
+  let best = null;
+  let bestAt = null;
+  for (const a of items) {
+    if (a.status === 'cancelled') continue;
+    const dt = parseApptDateTime(a.appointmentDate, a.appointmentTime);
+    if (!dt || dt < now) continue;
+    if (!bestAt || dt < bestAt) {
+      best = a;
+      bestAt = dt;
+    }
+  }
+  return best;
+}
+
+function ageFromDob(dob) {
+  if (!dob) return null;
+  const b = new Date(dob);
+  if (Number.isNaN(b.getTime())) return null;
+  let age = new Date().getFullYear() - b.getFullYear();
+  const m = new Date().getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && new Date().getDate() < b.getDate())) age -= 1;
+  return age;
+}
+
+function formatApptDateLong(dateStr, locale) {
+  if (!dateStr) return '—';
+  const d = new Date(`${String(dateStr).slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return String(dateStr);
+  return d.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
 
 export default function DoctorHome() {
   const { user } = useSelector((s) => s.auth);
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const [appointments, setAppointments] = useState(todayAppointments);
+  const [scheduleItems, setScheduleItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
-  const [patientsCount, setPatientsCount] = useState(Number(t('doctor.home.statsValPatients')) || 0);
-  const [reportsCount, setReportsCount] = useState(Number(t('doctor.home.statsValFiles')) || 0);
+  const [reportsCount, setReportsCount] = useState(0);
   const isEn = i18n.language?.startsWith('en');
   const Chevron = isEn ? ChevronRight : ChevronLeft;
 
-  const nextAppointment = useMemo(
-    () => ({
-      name: t('doctor.home.mockNext.name'),
-      age: t('doctor.home.mockNext.age'),
-      date: t('doctor.home.mockNext.date'),
-      time: t('doctor.home.mockNext.time'),
-      type: t('doctor.home.mockNext.type'),
-      location: t('doctor.home.mockNext.location'),
-      img: 'https://randomuser.me/api/portraits/men/32.jpg',
-    }),
-    [t]
-  );
+  const apiOrigin = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
+  const placeholderFace = 'https://randomuser.me/api/portraits/lego/1.jpg';
 
-  const activityItems = useMemo(() => t('doctor.home.activity', { returnObjects: true }) || [], [t]);
+  const { todayList, nextUp, patientsTodayCount, apptsTodayCount, nextTimeLabel, nextSubLabel } = useMemo(() => {
+    const todayStr = localTodayStr();
+    const todays = scheduleItems.filter((a) => String(a.appointmentDate || '').slice(0, 10) === todayStr);
+    const uniquePatients = new Set(todays.map((a) => a.patientId).filter(Boolean));
+    const next = findNextUpcoming(scheduleItems);
+    const nextTime = next ? formatTimeHm(next.appointmentTime) : '—';
+    const nextSub = next ? formatApptDateLong(next.appointmentDate, i18n.language) : '—';
+    return {
+      todayList: todays,
+      nextUp: next,
+      patientsTodayCount: uniquePatients.size,
+      apptsTodayCount: todays.length,
+      nextTimeLabel: nextTime,
+      nextSubLabel: nextSub,
+    };
+  }, [scheduleItems, i18n.language]);
+
+  const activityItems = useMemo(
+    () =>
+      todayList.slice(0, 5).map((a) => ({
+        id: a.id,
+        label: a.name,
+        value: `${a.time} · ${translateAppointmentStatus(a.status, t)}`,
+        done: a.done,
+      })),
+    [todayList, t]
+  );
 
   const stats = useMemo(
     () => [
       {
         label: t('doctor.home.stats.patientsToday'),
-        value: patientsCount,
+        value: String(patientsTodayCount),
         sub: t('doctor.home.stats.patientWord'),
         icon: Users,
         color: 'bg-blue-50 text-blue-600',
       },
       {
         label: t('doctor.home.stats.apptsToday'),
-        value: t('doctor.home.statsValAppts'),
+        value: String(apptsTodayCount),
         sub: t('doctor.home.stats.apptWord'),
         icon: Calendar,
         color: 'bg-green-50 text-green-600',
       },
       {
         label: t('doctor.home.stats.openFiles'),
-        value: reportsCount,
+        value: String(reportsCount),
         sub: t('doctor.home.stats.filesWord'),
         icon: FileText,
         color: 'bg-orange-50 text-orange-500',
       },
       {
         label: t('doctor.home.stats.next'),
-        value: t('doctor.home.statsValNextTime'),
-        sub: t('doctor.home.stats.morning'),
+        value: nextTimeLabel,
+        sub: nextSubLabel,
         icon: Clock,
         color: 'bg-purple-50 text-purple-600',
       },
     ],
-    [t, patientsCount, reportsCount]
+    [apptsTodayCount, patientsTodayCount, reportsCount, nextSubLabel, nextTimeLabel, t]
   );
 
-  const completedCount = appointments.filter((a) => a.done).length;
-  const totalCount = appointments.length;
-  const percent = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
+  const completedToday = todayList.filter((a) => a.done).length;
+  const totalToday = todayList.length;
+  const percent = totalToday ? Math.round((completedToday / totalToday) * 100) : 0;
 
   const loadDoctorDashboard = async () => {
     setLoading(true);
     try {
-      const [scheduleRes, patientsRes, reportsRes] = await Promise.all([
+      const [scheduleRes, reportsRes] = await Promise.all([
         axiosInstance.get(DOCTOR.SCHEDULE),
-        axiosInstance.get(DOCTOR_API.PATIENTS),
         axiosInstance.get(DOCTOR_API.REPORTS),
       ]);
 
       const normalized = (scheduleRes.data?.schedules || []).map((item) => ({
         id: item.id,
+        patientId: item.patient_id,
+        appointmentDate: item.appointment_date,
+        appointmentTime: item.appointment_time,
+        time: formatTimeHm(item.appointment_time),
         name: item.patient?.name || t('doctor.home.defaultDoctorName'),
-        time: item.appointment_time || '--:--',
-        type: item.notes || t('doctor.home.todayListTitle'),
+        patientDob: item.patient?.date_of_birth,
+        patientAvatar: item.patient?.avatar,
+        type: item.notes?.trim() ? item.notes : t('doctor.home.todayListTitle'),
         status: item.status || 'pending',
         done: item.status === 'completed',
+        location: [item.patient?.area, item.patient?.governorate].filter(Boolean).join(' — ') || '—',
       }));
 
-      setAppointments(normalized);
-      setPatientsCount((patientsRes.data?.patients || []).length);
+      setScheduleItems(normalized);
       setReportsCount((reportsRes.data?.reports || []).length);
     } catch (err) {
       toast.error(getApiErrorMessage(err, t('authErrors.default')));
@@ -117,7 +181,7 @@ export default function DoctorHome() {
     setSavingId(id);
     try {
       await axiosInstance.put(DOCTOR.SCHEDULE, { appointment_id: id, status });
-      setAppointments((prev) =>
+      setScheduleItems((prev) =>
         prev.map((a) => (a.id === id ? { ...a, done: status === 'completed', status } : a))
       );
       if (status === 'completed') {
@@ -134,6 +198,10 @@ export default function DoctorHome() {
 
   const handleDone = (id) => updateVisitStatus(id, 'completed');
   const handleNotDone = (id) => updateVisitStatus(id, 'confirmed');
+
+  const nextImg =
+    nextUp?.patientAvatar ? `${apiOrigin}/storage/${nextUp.patientAvatar}` : placeholderFace;
+  const nextAge = nextUp?.patientDob ? ageFromDob(nextUp.patientDob) : null;
 
   return (
     <div className="p-4 md:p-6 space-y-5">
@@ -169,32 +237,40 @@ export default function DoctorHome() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         <div className="card-hover lg:col-span-3 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm p-5">
           <h3 className="font-bold text-gray-800 mb-4 text-start">{t('doctor.home.nextTitle')}</h3>
-          <div className="flex items-start gap-4 flex-wrap">
-            <div className="flex flex-col gap-2 flex-1 text-start min-w-48">
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 text-blue-600 w-fit">{nextAppointment.type}</span>
-              <h4 className="font-extrabold text-gray-800 text-lg">{nextAppointment.name}</h4>
-              <p className="text-gray-400 text-xs">{t('doctor.home.dob', { age: nextAppointment.age })}</p>
-              <div className="flex items-center gap-2 justify-start text-xs text-gray-500">
-                <Calendar size={13} className="text-blue-400 shrink-0" />
-                <span>{nextAppointment.date}</span>
+          {!nextUp ? (
+            <p className="text-sm text-gray-500 text-start">{t('doctor.home.noNext')}</p>
+          ) : (
+            <div className="flex items-start gap-4 flex-wrap">
+              <div className="flex flex-col gap-2 flex-1 text-start min-w-48">
+                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 text-blue-600 w-fit">
+                  {nextUp.type}
+                </span>
+                <h4 className="font-extrabold text-gray-800 text-lg">{nextUp.name}</h4>
+                <p className="text-gray-400 text-xs">
+                  {nextAge != null ? t('doctor.home.ageShort', { age: nextAge }) : t('doctor.home.ageUnknown')}
+                </p>
+                <div className="flex items-center gap-2 justify-start text-xs text-gray-500">
+                  <Calendar size={13} className="text-blue-400 shrink-0" />
+                  <span>{formatApptDateLong(nextUp.appointmentDate, i18n.language)}</span>
+                </div>
+                <div className="flex items-center gap-2 justify-start text-xs text-gray-500">
+                  <Clock size={13} className="text-blue-400 shrink-0" />
+                  <span>{formatTimeHm(nextUp.appointmentTime)}</span>
+                </div>
+                <div className="flex items-center gap-2 justify-start text-xs text-gray-500">
+                  <MapPin size={13} className="text-blue-400 shrink-0" />
+                  <span>{nextUp.location}</span>
+                </div>
+                <Link
+                  to="/doctor/patients"
+                  className="mt-2 border border-blue-200 text-blue-600 font-semibold px-4 py-2 rounded-xl text-sm hover:bg-blue-50 transition-colors w-fit inline-block text-center"
+                >
+                  {t('doctor.home.openPatientFile')}
+                </Link>
               </div>
-              <div className="flex items-center gap-2 justify-start text-xs text-gray-500">
-                <Clock size={13} className="text-blue-400 shrink-0" />
-                <span>{nextAppointment.time}</span>
-              </div>
-              <div className="flex items-center gap-2 justify-start text-xs text-gray-500">
-                <MapPin size={13} className="text-blue-400 shrink-0" />
-                <span>{nextAppointment.location}</span>
-              </div>
-              <button
-                type="button"
-                className="mt-2 border border-blue-200 text-blue-600 font-semibold px-4 py-2 rounded-xl text-sm hover:bg-blue-50 transition-colors w-fit"
-              >
-                {t('doctor.home.openPatientFile')}
-              </button>
+              <img src={nextImg} alt="" className="w-20 h-20 rounded-2xl object-cover shrink-0" />
             </div>
-            <img src={nextAppointment.img} alt="" className="w-20 h-20 rounded-2xl object-cover shrink-0" />
-          </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5 pt-4 border-t border-gray-100">
             {[
@@ -239,13 +315,16 @@ export default function DoctorHome() {
             </div>
           </div>
           <p className="text-center text-xs text-gray-500 mb-4">
-            {t('doctor.home.taskProgress', { done: completedCount, total: totalCount })}
+            {t('doctor.home.taskProgress', { done: completedToday, total: totalToday })}
           </p>
 
           <div className="space-y-3">
             {loading && <p className="text-xs text-gray-400 text-start">{t('common.loading')}</p>}
-            {activityItems.map(({ label, value, done }) => (
-              <div key={label} className="flex items-center gap-3">
+            {!loading && activityItems.length === 0 && (
+              <p className="text-xs text-gray-400 text-start">{t('doctor.home.todayEmpty')}</p>
+            )}
+            {activityItems.map(({ id, label, value, done }) => (
+              <div key={id} className="flex items-center gap-3">
                 <div
                   className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${done ? 'bg-green-100' : 'bg-yellow-100'}`}
                 >
@@ -270,7 +349,10 @@ export default function DoctorHome() {
           <h3 className="font-bold text-gray-800 text-start">{t('doctor.home.todayScheduleTitle')}</h3>
         </div>
         <div className="divide-y divide-gray-50">
-          {appointments.map((apt) => (
+          {!loading && todayList.length === 0 && (
+            <div className="px-5 py-8 text-center text-sm text-gray-400">{t('doctor.home.todayEmpty')}</div>
+          )}
+          {todayList.map((apt) => (
             <div key={apt.id} className="px-5 py-4 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2 ms-auto flex-wrap">
                 <button
@@ -297,16 +379,18 @@ export default function DoctorHome() {
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div
                   className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
-                      apt.status === 'completed'
+                    apt.status === 'completed'
                       ? 'bg-gray-100 text-gray-500'
-                        : apt.status === 'pending'
+                      : apt.status === 'pending'
                         ? 'bg-yellow-100 text-yellow-600'
                         : 'bg-blue-100 text-blue-600'
                   }`}
                 >
                   {translateAppointmentStatus(apt.status, t)}
                 </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-500 shrink-0">{apt.type}</span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-500 shrink-0 truncate max-w-[40%]">
+                  {apt.type}
+                </span>
                 <div className="text-start min-w-0 flex-1">
                   <p className="font-bold text-gray-800 text-sm truncate">{apt.name}</p>
                   <p className="text-xs text-gray-400 flex items-center justify-start gap-1">

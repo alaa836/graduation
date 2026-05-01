@@ -14,12 +14,13 @@ import { getApiErrorMessage } from '../../utils/apiError';
 
 const STEPS = ['email', 'otp', 'password'];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^01\d{9}$/;
 
 export default function ForgotPasswordPage() {
   const { t } = useTranslation();
   const { isLtr } = useDirection();
   const [step, setStep] = useState('email');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -36,20 +37,21 @@ export default function ForgotPasswordPage() {
   }, [t]);
 
   const handleSendOtp = async () => {
-    if (!EMAIL_REGEX.test(email.trim())) {
-      setError(t('public.forgot.errEmail'));
+    const clean = identifier.trim();
+    if (!EMAIL_REGEX.test(clean) && !PHONE_REGEX.test(clean)) {
+      setError(t('public.forgot.errIdentifier'));
       return;
     }
     setError('');
     setLoading(true);
     try {
-      await axiosInstance.post(AUTH.FORGOT_PASSWORD, { email: email.trim() });
+      await axiosInstance.post(AUTH.FORGOT_PASSWORD, { identifier: clean });
       setLoading(false);
       setStep('otp');
       toast.info(t('public.forgot.toastOtp'));
     } catch (err) {
       setLoading(false);
-      setError(getApiErrorMessage(err, t('public.forgot.errEmail')));
+      setError(getApiErrorMessage(err, t('public.forgot.errIdentifier')));
     }
   };
 
@@ -63,7 +65,7 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     try {
       await axiosInstance.post(AUTH.VERIFY_OTP, {
-        email: email.trim(),
+        identifier: identifier.trim(),
         otp: code,
       });
       setLoading(false);
@@ -88,7 +90,7 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     try {
       await axiosInstance.post(AUTH.RESET_PASSWORD, {
-        email: email.trim(),
+        identifier: identifier.trim(),
         otp: otp.join(''),
         password,
         password_confirmation: confirmPassword,
@@ -160,13 +162,13 @@ export default function ForgotPasswordPage() {
                     <label className="block text-sm font-semibold text-gray-700 mb-1 text-start">{t('public.forgot.emailLabel')}</label>
                     <div className="relative">
                       <input
-                        type="email"
-                        value={email}
+                        type="text"
+                        value={identifier}
                         onChange={(e) => {
-                          setEmail(e.target.value);
+                          setIdentifier(e.target.value);
                           setError('');
                         }}
-                        placeholder="example@mail.com"
+                        placeholder={t('public.forgot.identifierPh')}
                         className="w-full border border-gray-200 rounded-xl px-4 py-3 ps-11 text-sm text-start placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
                       />
                       <Mail size={17} className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -176,7 +178,7 @@ export default function ForgotPasswordPage() {
                   <button
                     type="button"
                     onClick={handleSendOtp}
-                    disabled={loading || !email}
+                    disabled={loading || !identifier}
                     className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl text-sm hover:bg-blue-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                   >
                     {loading ? (
@@ -197,7 +199,7 @@ export default function ForgotPasswordPage() {
                     <h2 className="text-xl font-extrabold text-gray-800">{t('public.forgot.otpTitle')}</h2>
                     <p className="text-gray-400 text-sm mt-1">
                       {t('public.forgot.otpSent')}{' '}
-                      <span className="text-blue-600 font-semibold">{email}</span>
+                      <span className="text-blue-600 font-semibold">{identifier}</span>
                     </p>
                   </div>
 

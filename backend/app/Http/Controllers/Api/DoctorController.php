@@ -52,8 +52,11 @@ class DoctorController extends Controller
 
         $today = now()->startOfDay();
 
-        $appointments = Appointment::where('doctor_id', $doctor->id)
+        $appointments = Appointment::query()
+            ->select(['appointment_date', 'appointment_time'])
+            ->where('doctor_id', $doctor->id)
             ->whereDate('appointment_date', '>=', $today->toDateString())
+            ->whereIn('status', ['pending', 'confirmed', 'inProgress'])
             ->get()
             ->groupBy('appointment_date');
 
@@ -128,7 +131,7 @@ class DoctorController extends Controller
     public function allSchedules(Request $request): JsonResponse
     {
         $appointments = Appointment::where('doctor_id', $request->user()->id)
-            ->with('patient:id,name,email')
+            ->with('patient:id,name,email,date_of_birth,governorate,area,avatar')
             ->latest()
             ->get();
 
@@ -197,7 +200,7 @@ class DoctorController extends Controller
             ->keyBy('patient_id');
 
         $rows = Appointment::where('doctor_id', $doctorId)
-            ->with('patient:id,name,email,phone,gender,date_of_birth')
+            ->with('patient:id,name,email,phone,gender,date_of_birth,avatar')
             ->orderByDesc('appointment_date')
             ->orderByDesc('appointment_time')
             ->get()
@@ -221,12 +224,61 @@ class DoctorController extends Controller
                     'last_visit' => $latest->appointment_date,
                     'appointments_count' => $items->count(),
                     'care_status' => $care?->status ?? 'active',
+                    'avatar' => $patient->avatar,
                 ];
             })
             ->filter()
             ->values();
 
         return response()->json(['patients' => $rows]);
+    }
+
+    /**
+     * Register a new patient account and link them to this doctor (care status + initial appointment).
+     */
+    public function storePatient(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'gender' => ['nullable', 'in:male,female'],
+            'date_of_birth' => ['nullable', 'date'],
+        ]);
+
+        $patient = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+            'phone' => $validated['phone'] ?? null,
+            'gender' => $validated['gender'] ?? null,
+            'date_of_birth' => $validated['date_of_birth'] ?? null,
+            'role' => 'patient',
+            'is_active' => true,
+        ]);
+
+        $doctorId = $request->user()->id;
+
+        DoctorPatientStatus::updateOrCreate(
+            ['doctor_id' => $doctorId, 'patient_id' => $patient->id],
+            ['status' => 'active']
+        );
+
+        $now = now();
+        Appointment::create([
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctorId,
+            'appointment_date' => $now->toDateString(),
+            'appointment_time' => $now->format('H:i'),
+            'notes' => 'New patient registration (doctor dashboard)',
+            'status' => 'confirmed',
+        ]);
+
+        return response()->json([
+            'message' => 'Patient created successfully',
+            'patient' => $patient->fresh()->only(['id', 'name', 'email', 'phone', 'gender', 'date_of_birth', 'role', 'created_at']),
+        ], 201);
     }
 
     public function updatePatientCareStatus(Request $request, int $patient): JsonResponse

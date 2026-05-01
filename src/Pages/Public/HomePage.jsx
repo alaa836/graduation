@@ -52,7 +52,7 @@ function useSectionReveal(stableKey) {
   return [ref, visible];
 }
 
-const doctors = PUBLIC_DOCTORS.slice(0, 4);
+const doctors = PUBLIC_DOCTORS.slice(0, 15);
 
 const SERVICE_ICONS = [Stethoscope, Ambulance, HeartPulse];
 const SPECIALTY_ICONS = ['❤️', '🧠', '👶', '🦷', '🏃', '👁️'];
@@ -274,6 +274,35 @@ function Doctors() {
   const { t } = useTranslation();
   const { isLtr } = useDirection();
   const [sectionRef, revealed] = useSectionReveal('home-doctors');
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const touchStartX = useRef(0);
+  const touchDeltaX = useRef(0);
+  const cardsPerSlide = 3;
+  const doctorSlides = useMemo(() => {
+    const chunks = [];
+    for (let i = 0; i < doctors.length; i += cardsPerSlide) {
+      chunks.push(doctors.slice(i, i + cardsPerSlide));
+    }
+    return chunks;
+  }, []);
+  const totalSlides = doctorSlides.length;
+
+  const goNext = () => {
+    setActiveSlide((s) => (s + 1) % totalSlides);
+  };
+  const goPrev = () => {
+    setActiveSlide((s) => (s - 1 + totalSlides) % totalSlides);
+  };
+
+  useEffect(() => {
+    if (paused || totalSlides <= 1) return;
+    const timer = window.setInterval(() => {
+      setActiveSlide((s) => (s + 1) % totalSlides);
+    }, 4200);
+    return () => window.clearInterval(timer);
+  }, [paused, totalSlides]);
+
   return (
     <section ref={sectionRef} className="py-10 md:py-14 px-4 md:px-8">
       <div className="max-w-6xl mx-auto">
@@ -296,44 +325,104 @@ function Doctors() {
             )}
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {doctors.map((doc, i) => (
+        <div
+          className={`relative transition-all duration-500 ease-out ${
+            revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+          } motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0`}
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          onTouchStart={(e) => {
+            touchStartX.current = e.touches[0]?.clientX || 0;
+            touchDeltaX.current = 0;
+          }}
+          onTouchMove={(e) => {
+            const x = e.touches[0]?.clientX || 0;
+            touchDeltaX.current = x - touchStartX.current;
+          }}
+          onTouchEnd={() => {
+            if (Math.abs(touchDeltaX.current) < 42) return;
+            if (touchDeltaX.current < 0) {
+              isLtr ? goNext() : goPrev();
+            } else {
+              isLtr ? goPrev() : goNext();
+            }
+          }}
+        >
+          <div className="overflow-hidden rounded-[26px]">
             <div
-              key={doc.id}
-              style={{ transitionDelay: revealed ? `${i * 75}ms` : '0ms' }}
-              className={`group bg-white/90 border border-gray-200 rounded-[24px] overflow-hidden shadow-sm flex flex-col cursor-default transition-all duration-500 ease-out hover:shadow-xl hover:shadow-cyan-100/80 hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
-                revealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-              } motion-reduce:opacity-100 motion-reduce:translate-y-0`}
+              className="flex transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+              style={{ transform: `translateX(${isLtr ? '-' : ''}${activeSlide * 100}%)` }}
             >
-              <div className="relative mx-2.5 mt-2.5 rounded-[20px] bg-cyan-500 overflow-hidden">
-                <img
-                  src={doc.img}
-                  alt={doc.name}
-                  className="block w-full h-36 md:h-40 object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:group-hover:scale-100"
-                />
-              </div>
-              <div className="px-3.5 pt-3 pb-4 text-center">
-                {doc.center && (
-                  <span className="inline-block text-[10px] font-semibold text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded-full mb-1">
-                    {doc.center}
-                  </span>
-                )}
-                <p className="font-bold text-gray-800 text-sm md:text-base">{doc.name}</p>
-                <p className="text-cyan-600 text-xs md:text-sm mt-1 font-semibold">{doc.specialty}</p>
-                <p className="text-[11px] md:text-xs text-gray-400 mt-2 leading-relaxed min-h-8 line-clamp-2">
-                  {doc.center
-                    ? [doc.subtitle, doc.address].filter(Boolean).join(' — ') || doc.notes || ''
-                    : `${t('home.doctors.subtitle')} - ${doc.reviews}+`}
-                </p>
-                <Link
-                  to={`/login?doctor=${doc.id}`}
-                  className="mt-3 inline-flex items-center justify-center bg-cyan-500 text-white text-xs md:text-sm font-semibold px-4 md:px-5 py-1.5 rounded-md transition-colors duration-200 hover:bg-cyan-600"
-                >
-                  {t('home.hero.booking.cta')}
-                </Link>
-              </div>
+              {doctorSlides.map((slide, slideIdx) => (
+                <div key={`slide-${slideIdx}`} className="w-full shrink-0 px-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {slide.map((doc) => (
+                      <div key={doc.id} className="group bg-white/90 border border-gray-200 rounded-[24px] overflow-hidden shadow-sm flex flex-col cursor-default transition-all duration-500 hover:shadow-xl hover:shadow-cyan-100/80">
+                        <div className="relative mx-2.5 mt-2.5 rounded-[20px] bg-cyan-50 overflow-hidden aspect-[5/4]">
+                          <img
+                            src={doc.img}
+                            alt={doc.name}
+                            className="absolute inset-0 block w-full h-full object-contain object-top p-2 transition-transform duration-500 group-hover:scale-105 motion-reduce:group-hover:scale-100"
+                          />
+                        </div>
+                        <div className="px-3.5 pt-3 pb-4 text-center">
+                          {doc.center && (
+                            <span className="inline-block text-[10px] font-semibold text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded-full mb-1">
+                              {doc.center}
+                            </span>
+                          )}
+                          <p className="font-bold text-gray-800 text-sm md:text-base">{doc.name}</p>
+                          <p className="text-cyan-600 text-xs md:text-sm mt-1 font-semibold">{doc.specialty}</p>
+                          <p className="text-[11px] md:text-xs text-gray-400 mt-2 leading-relaxed min-h-8 line-clamp-2">
+                            {doc.center
+                              ? [doc.subtitle, doc.address].filter(Boolean).join(' — ') || doc.notes || ''
+                              : `${t('home.doctors.subtitle')} - ${doc.reviews}+`}
+                          </p>
+                          <Link
+                            to={`/login?doctor=${doc.id}`}
+                            className="mt-3 inline-flex items-center justify-center bg-cyan-500 text-white text-xs md:text-sm font-semibold px-4 md:px-5 py-1.5 rounded-md transition-colors duration-200 hover:bg-cyan-600"
+                          >
+                            {t('home.hero.booking.cta')}
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={isLtr ? goPrev : goNext}
+            className="absolute top-1/2 -translate-y-1/2 start-2 md:start-3 w-9 h-9 rounded-full bg-white/95 border border-gray-200 text-gray-600 flex items-center justify-center shadow-sm hover:bg-white hover:text-blue-600 transition-colors"
+            aria-label="previous doctor"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={isLtr ? goNext : goPrev}
+            className="absolute top-1/2 -translate-y-1/2 end-2 md:end-3 w-9 h-9 rounded-full bg-white/95 border border-gray-200 text-gray-600 flex items-center justify-center shadow-sm hover:bg-white hover:text-blue-600 transition-colors"
+            aria-label="next doctor"
+          >
+            <ChevronRight size={16} />
+          </button>
+
+          <div className="flex items-center justify-center gap-2 mt-4">
+            {doctorSlides.map((slide, idx) => (
+              <button
+                key={`dot-${idx}-${slide[0]?.id || 'x'}`}
+                type="button"
+                onClick={() => setActiveSlide(idx)}
+                className={`h-2 rounded-full transition-all ${
+                  idx === activeSlide ? 'w-6 bg-blue-600' : 'w-2 bg-gray-300 hover:bg-gray-400'
+                }`}
+                aria-label={`slide ${idx + 1}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </section>

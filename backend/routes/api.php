@@ -63,6 +63,7 @@ Route::middleware(['auth:sanctum', 'role:doctor'])->group(function () {
     Route::post('/doctor/appointments', [DoctorController::class, 'storeAppointment']);
     Route::put('/doctor/schedule', [DoctorController::class, 'editSchedule']);
     Route::get('/doctor/patients', [DoctorController::class, 'patients']);
+    Route::post('/doctor/patients', [DoctorController::class, 'storePatient']);
     Route::get('/doctor/patients/{patient}', [DoctorController::class, 'patientById']);
     Route::put('/doctor/patients/{patient}/care-status', [DoctorController::class, 'updatePatientCareStatus']);
     Route::get('/doctor/reports', [DoctorController::class, 'reports']);

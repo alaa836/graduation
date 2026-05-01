@@ -29,6 +29,9 @@ export default function DoctorAppointmentsPage() {
   const [formTime, setFormTime] = useState('09:00');
   const [formNotes, setFormNotes] = useState('');
 
+  const apiOrigin = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '');
+  const placeholderApptImg = 'https://randomuser.me/api/portraits/lego/1.jpg';
+
   const loadSchedules = async () => {
     setLoading(true);
     try {
@@ -42,7 +45,7 @@ export default function DoctorAppointmentsPage() {
         type: item.notes || t('doctor.appointments.tableSubtitle'),
         status: item.status || 'pending',
         done: item.status === 'completed',
-        img: 'https://randomuser.me/api/portraits/lego/1.jpg',
+        img: item.patient?.avatar ? `${apiOrigin}/storage/${item.patient.avatar}` : placeholderApptImg,
       }));
       setAppointments(normalized);
     } catch (err) {

@@ -8,14 +8,6 @@ import { getApiErrorMessage } from '../../utils/apiError';
 
 const FILTER_KEYS = ['all', 'lab', 'xray', 'periodic', 'rx'];
 
-/** معرفات سالبة = بيانات تجريبية فقط (لا صفوف مطابقة في قاعدة البيانات) */
-const mockReports = [
-  { id: -1, patient: 'سارة صالح المري', pid: '#P-2401', typeId: 'bloodLab', category: 'lab', date: '24 أكتوبر 2023', statusKey: 'completed', avatar: 'ص م' },
-  { id: -2, patient: 'محمد علي العتيبي', pid: '#P-2405', typeId: 'mri', category: 'xray', date: '22 أكتوبر 2023', statusKey: 'underReview', avatar: 'م ع' },
-  { id: -3, patient: 'فهد خالد الحربي', pid: '#P-2410', typeId: 'annualReport', category: 'periodic', date: '20 أكتوبر 2023', statusKey: 'completed', avatar: 'ف خ' },
-  { id: -4, patient: 'أمل ناصر القحطاني', pid: '#P-2415', typeId: 'ecg', category: 'periodic', date: '18 أكتوبر 2023', statusKey: 'pending', avatar: 'أ ن' },
-];
-
 const avatarColors = ['bg-blue-100 text-blue-600', 'bg-green-100 text-green-600', 'bg-purple-100 text-purple-600', 'bg-orange-100 text-orange-600'];
 
 const REPORT_STATUS_KEYS = ['completed', 'underReview', 'pending'];
@@ -35,30 +27,29 @@ function statusLabel(key, t) {
 }
 
 function AddReportModal({ onClose, onSave }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [form, setForm] = useState({ patient: '', type: 'lab', date: '', details: '' });
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const categoryKeys = useMemo(() => ['lab', 'xray', 'periodic', 'rx'], []);
 
-  const handleSave = () => {
-    if (!form.patient) return;
+  const handleSave = async () => {
+    if (!form.patient?.trim()) return;
     setLoading(true);
-    setTimeout(() => {
-      onSave({
-        patient: form.patient,
-        typeId: 'newReport',
-        category: form.type,
-        date: form.date || new Date().toLocaleDateString(i18n.language?.startsWith('en') ? 'en-GB' : 'ar-EG'),
-        statusKey: 'underReview',
-        pid: '#P-NEW',
-        avatar: form.patient.slice(0, 2),
-        details: form.details,
-      });
-      setLoading(false);
+    try {
+      await Promise.resolve(
+        onSave({
+          patient: form.patient.trim(),
+          category: form.type,
+          date: form.date || null,
+          details: form.details?.trim() || null,
+        })
+      );
       onClose();
-    }, 800);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -244,7 +235,7 @@ function ViewReportModal({ report, onClose, onStatusChange }) {
 export default function DoctorReportsPage() {
   const { t } = useTranslation();
   const toast = useToast();
-  const [reports, setReports] = useState(mockReports);
+  const [reports, setReports] = useState([]);
   const [filter, setFilter] = useState('all');
   const [showAdd, setShowAdd] = useState(false);
   const [viewReport, setViewReport] = useState(null);
@@ -254,18 +245,27 @@ export default function DoctorReportsPage() {
     setLoading(true);
     try {
       const res = await axiosInstance.get(DOCTOR_API.REPORTS);
-      const mapped = (res.data?.reports || []).map((r) => ({
-        id: r.id,
-        patient: r.patient_name,
-        pid: r.patient_id ? `#P-${r.patient_id}` : '#P-NA',
-        typeId: r.type === 'xray' ? 'mri' : r.type === 'periodic' ? 'annualReport' : r.type === 'rx' ? 'ecg' : 'bloodLab',
-        category: r.type,
-        date: r.report_date || '-',
-        statusKey: REPORT_STATUS_KEYS.includes(r.status) ? r.status : 'underReview',
-        avatar: (r.patient_name || 'NA').slice(0, 2),
-        details: r.details || null,
-      }));
-      setReports((prev) => (mapped.length > 0 ? mapped : prev));
+      const mapped = (res.data?.reports || []).map((r) => {
+        const rd = r.report_date;
+        const dateStr =
+          rd == null
+            ? '-'
+            : typeof rd === 'string'
+              ? rd.slice(0, 10)
+              : String(rd).slice(0, 10);
+        return {
+          id: r.id,
+          patient: r.patient_name,
+          pid: r.patient_id ? `#P-${r.patient_id}` : '#P-NA',
+          typeId: r.type === 'xray' ? 'mri' : r.type === 'periodic' ? 'annualReport' : r.type === 'rx' ? 'ecg' : 'bloodLab',
+          category: r.type,
+          date: dateStr,
+          statusKey: REPORT_STATUS_KEYS.includes(r.status) ? r.status : 'underReview',
+          avatar: (r.patient_name || 'NA').slice(0, 2),
+          details: r.details || null,
+        };
+      });
+      setReports(mapped);
     } catch (err) {
       toast.error(getApiErrorMessage(err, t('authErrors.default')));
     } finally {
@@ -279,12 +279,6 @@ export default function DoctorReportsPage() {
   }, []);
 
   const patchReportStatus = async (id, statusKey) => {
-    if (typeof id === 'number' && id < 0) {
-      setReports((prev) => prev.map((r) => (r.id === id ? { ...r, statusKey } : r)));
-      setViewReport((prev) => (prev && prev.id === id ? { ...prev, statusKey } : prev));
-      toast.success(t('doctor.reports.statusUpdated'));
-      return;
-    }
     try {
       await axiosInstance.put(DOCTOR_API.REPORT_BY_ID(id), { status: statusKey });
       setReports((prev) => prev.map((r) => (r.id === id ? { ...r, statusKey } : r)));
@@ -340,6 +334,9 @@ export default function DoctorReportsPage() {
           <span className="text-start">{t('doctor.reports.colPatient')}</span>
         </div>
         <div className="divide-y divide-gray-50">
+          {!loading && filtered.length === 0 && (
+            <div className="px-5 py-12 text-center text-sm text-gray-400">{t('doctor.reports.emptyList')}</div>
+          )}
           {filtered.map((r, i) => (
             <div key={r.id} className="px-5 py-4">
               <div className="md:hidden flex items-center justify-between gap-2">
@@ -448,9 +445,10 @@ export default function DoctorReportsPage() {
                 details: r.details || null,
               });
               toast.success(t('doctor.reports.toastAdded'));
-              fetchReports();
+              await fetchReports();
             } catch (err) {
               toast.error(getApiErrorMessage(err, t('authErrors.default')));
+              throw err;
             }
           }}
         />

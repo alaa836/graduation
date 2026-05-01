@@ -46,6 +46,25 @@ return [
         'webhook_secret' => env('PAYMENT_WEBHOOK_SECRET', ''),
     ],
 
+    /*
+    | OTP / transactional SMS
+    | - driver=auto: إذا كان الرابط يحتوي africastalking.com يُستخدم تنسيق Africa's Talking
+    |   وإلا يُرسل JSON عام (api_key, to, sender, message).
+    */
+    'sms' => [
+        'url' => env('SMS_PROVIDER_URL', ''),
+        'api_key' => env('SMS_PROVIDER_API_KEY') ?: env('AT_API_KEY', ''),
+        'username' => env('AT_USERNAME', 'sandbox'),
+        /** Alphanumeric / short-code — لا يمرّ إلا لو معتمد في لوحة Africa’s Talking؛ وإلا سيُرفض الطلب غالبًا */
+        'from' => env('SMS_PROVIDER_SENDER', ''),
+        'driver' => env('SMS_PROVIDER_DRIVER', 'auto'),
+        /** افتراضيًا نحاول الأول بدون from (يزيد نجاح OTP)، ثم نعيد المحاولة مع from إذا وُجد */
+        'at_try_without_sender_first' => filter_var(
+            env('SMS_AT_TRY_WITHOUT_SENDER_FIRST', true),
+            FILTER_VALIDATE_BOOL
+        ),
+    ],
+
     'ai' => [
         // fake: simple echo (dev)
         // database: replies from ai_knowledge_entries (no API key)

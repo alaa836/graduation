@@ -6,13 +6,6 @@ import axiosInstance from '../../api/axiosInstance';
 import { DOCTOR_API } from '../../api/endpoints';
 import { getApiErrorMessage } from '../../utils/apiError';
 
-/** معرفات سالبة = بيانات تجريبية فقط */
-const mockPrescriptions = [
-  { id: -1, patient: 'محمد عبدالله', pid: '#12040', diagnosis: 'ارتفاع ضغط الدم', drug: 'أملوديبين 5 ملجم', date: '2023/10/12', statusKey: 'active' },
-  { id: -2, patient: 'سارة المنصور', pid: '#12055', diagnosis: 'عدوى بكتيرية', drug: 'أوجمنتين 1 جم', date: '2023/10/05', statusKey: 'ended' },
-  { id: -3, patient: 'فهد العتيبي', pid: '#12098', diagnosis: 'ألم مفاصل مزمن', drug: 'فولتاين 50 ملجم', date: '2023/10/10', statusKey: 'active' },
-];
-
 const RX_STATUS_KEYS = ['active', 'ended'];
 
 function rxStatusLabel(statusKey, t) {
@@ -23,7 +16,7 @@ const rxStatusSelectClass =
   'max-w-full min-w-0 w-full text-xs border border-gray-200 rounded-lg py-1.5 px-2 bg-white text-gray-800 text-start focus:outline-none focus:ring-2 focus:ring-blue-500/30';
 
 function AddPrescriptionModal({ onClose, onSave }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [patientSearch, setPatientSearch] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
   const [drugs, setDrugs] = useState([{ name: '', dose: '', repeat: '', duration: '' }]);
@@ -33,21 +26,26 @@ function AddPrescriptionModal({ onClose, onSave }) {
   const addDrug = () => setDrugs([...drugs, { name: '', dose: '', repeat: '', duration: '' }]);
   const updateDrug = (i, field, val) => setDrugs(drugs.map((d, idx) => (idx === i ? { ...d, [field]: val } : d)));
 
-  const handleSave = () => {
-    if (!patientSearch) return;
+  const handleSave = async () => {
+    if (!patientSearch?.trim()) return;
     setLoading(true);
-    const locale = i18n.language?.startsWith('en') ? 'en-GB' : 'ar-EG';
-    setTimeout(() => {
-      onSave({
-        patient: patientSearch,
-        diagnosis,
-        drug: drugs[0]?.name || '-',
-        date: new Date().toLocaleDateString(locale),
-        status: 'نشط',
-      });
-      setLoading(false);
+    const drugLine = drugs
+      .map((d) => [d.name, d.dose, d.repeat, d.duration].filter(Boolean).join(' ').trim())
+      .filter(Boolean)
+      .join(' | ') || drugs[0]?.name || '-';
+    try {
+      await Promise.resolve(
+        onSave({
+          patient: patientSearch.trim(),
+          diagnosis: diagnosis?.trim() || null,
+          drug: drugLine,
+          notes: notes?.trim() || null,
+        })
+      );
       onClose();
-    }, 800);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const drugFields = [
@@ -241,7 +239,7 @@ function ViewPrescriptionModal({ rx, onClose, onStatusChange }) {
 export default function DoctorPrescriptionsPage() {
   const { t } = useTranslation();
   const toast = useToast();
-  const [prescriptions, setPrescriptions] = useState(mockPrescriptions);
+  const [prescriptions, setPrescriptions] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [viewRx, setViewRx] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -250,16 +248,23 @@ export default function DoctorPrescriptionsPage() {
     setLoading(true);
     try {
       const res = await axiosInstance.get(DOCTOR_API.PRESCRIPTIONS);
-      const mapped = (res.data?.prescriptions || []).map((p) => ({
-        id: p.id,
-        patient: p.patient_name,
-        pid: p.patient_id ? `#${p.patient_id}` : '#NA',
-        diagnosis: p.diagnosis || '-',
-        drug: p.drug,
-        date: p.prescribed_at || '-',
-        statusKey: p.status === 'ended' ? 'ended' : 'active',
-      }));
-      setPrescriptions((prev) => (mapped.length > 0 ? mapped : prev));
+      const mapped = (res.data?.prescriptions || []).map((p) => {
+        const pd = p.prescribed_at;
+        let dateStr = '-';
+        if (pd != null) {
+          dateStr = typeof pd === 'string' ? pd.slice(0, 10) : String(pd).slice(0, 10);
+        }
+        return {
+          id: p.id,
+          patient: p.patient_name,
+          pid: p.patient_id ? `#${p.patient_id}` : '#NA',
+          diagnosis: p.diagnosis || '-',
+          drug: p.drug,
+          date: dateStr,
+          statusKey: p.status === 'ended' ? 'ended' : 'active',
+        };
+      });
+      setPrescriptions(mapped);
     } catch (err) {
       toast.error(getApiErrorMessage(err, t('authErrors.default')));
     } finally {
@@ -273,12 +278,6 @@ export default function DoctorPrescriptionsPage() {
   }, []);
 
   const patchPrescriptionStatus = async (id, statusKey) => {
-    if (typeof id === 'number' && id < 0) {
-      setPrescriptions((prev) => prev.map((x) => (x.id === id ? { ...x, statusKey } : x)));
-      setViewRx((prev) => (prev && prev.id === id ? { ...prev, statusKey } : prev));
-      toast.success(t('doctor.prescriptions.statusUpdated'));
-      return;
-    }
     try {
       await axiosInstance.put(DOCTOR_API.PRESCRIPTION_BY_ID(id), { status: statusKey });
       setPrescriptions((prev) => prev.map((x) => (x.id === id ? { ...x, statusKey } : x)));
@@ -316,6 +315,9 @@ export default function DoctorPrescriptionsPage() {
           <span className="text-start">{t('doctor.prescriptions.colPatient')}</span>
         </div>
         <div className="divide-y divide-gray-50">
+          {!loading && prescriptions.length === 0 && (
+            <div className="px-5 py-12 text-center text-sm text-gray-400">{t('doctor.prescriptions.emptyList')}</div>
+          )}
           {prescriptions.map((p) => (
             <div key={p.id} className="px-5 py-4">
               <div className="md:hidden flex items-center justify-between gap-2">
@@ -369,11 +371,6 @@ export default function DoctorPrescriptionsPage() {
                   <button
                     type="button"
                     onClick={async () => {
-                      if (typeof p.id === 'number' && p.id < 0) {
-                        setPrescriptions((prev) => prev.filter((x) => x.id !== p.id));
-                        toast.success(t('doctor.prescriptions.toastDeleted'));
-                        return;
-                      }
                       try {
                         await axiosInstance.delete(DOCTOR_API.PRESCRIPTION_BY_ID(p.id));
                         setPrescriptions((prev) => prev.filter((x) => x.id !== p.id));
@@ -439,13 +436,14 @@ export default function DoctorPrescriptionsPage() {
                 patient_name: p.patient,
                 diagnosis: p.diagnosis,
                 drug: p.drug,
-                prescribed_at: p.date || null,
+                notes: p.notes,
                 status: 'active',
               });
               toast.success(t('doctor.prescriptions.toastIssued'));
-              fetchPrescriptions();
+              await fetchPrescriptions();
             } catch (err) {
               toast.error(getApiErrorMessage(err, t('authErrors.default')));
+              throw err;
             }
           }}
         />

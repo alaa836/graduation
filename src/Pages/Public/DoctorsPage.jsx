@@ -92,11 +92,11 @@ export default function DoctorsPage() {
                   key={doc.id}
                   className="group bg-white/95 border border-gray-200 rounded-[24px] overflow-hidden shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-cyan-100/80 hover:-translate-y-1 motion-reduce:hover:translate-y-0"
                 >
-                  <div className="mx-2.5 mt-2.5 rounded-[20px] bg-cyan-500 overflow-hidden h-40">
+                  <div className="relative mx-2.5 mt-2.5 rounded-[20px] bg-cyan-50 overflow-hidden aspect-[5/4]">
                     <img
                       src={doc.img}
                       alt={doc.name}
-                      className="block w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:group-hover:scale-100"
+                      className="absolute inset-0 block w-full h-full object-contain object-top p-2 transition-transform duration-500 group-hover:scale-105 motion-reduce:group-hover:scale-100"
                     />
                   </div>
                   <div className="px-3.5 pt-3 pb-4 text-center">
